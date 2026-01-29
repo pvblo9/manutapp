@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Otimização para produção
+  output: 'standalone',
+  // Configurações de segurança
+  poweredByHeader: false,
+  // Compressão
+  compress: true,
 };
 
 export default nextConfig;

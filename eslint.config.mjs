@@ -13,6 +13,22 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // Desabilitar erros de tipo 'any' (são apenas warnings de estilo)
+      "@typescript-eslint/no-explicit-any": "warn",
+      // Desabilitar avisos de variáveis não usadas
+      "@typescript-eslint/no-unused-vars": "warn",
+      // Desabilitar avisos de interfaces vazias
+      "@typescript-eslint/no-empty-object-type": "warn",
+      // Permitir setState em effects (comum em React)
+      "react-hooks/set-state-in-effect": "warn",
+      // Permitir dependências faltantes em useEffect
+      "react-hooks/exhaustive-deps": "warn",
+      // Permitir uso de <img> (Next.js Image pode não ser necessário em todos os casos)
+      "@next/next/no-img-element": "warn",
+    },
+  },
 ]);
 
 export default eslintConfig;

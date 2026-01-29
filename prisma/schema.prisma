@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id         String         @id @default(uuid())
+  name       String
+  username   String         @unique
+  email      String         @unique
+  password   String
+  role       Role           @default(OPERATOR)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  assignedOS ServiceOrder[] @relation("AssignedTechnician")
+  osHistory  OSHistory[]
+}
+
+model ServiceOrder {
+  id              String      @id @default(uuid())
+  date            DateTime    @default(now())
+  machine         String
+  machineCode     String
+  maintenanceType String
+  situation       String
+  technicianId    String
+  description     String
+  contactPerson   String
+  sector          String
+  status          OSStatus    @default(OPEN)
+  priority        Priority    @default(MEDIUM)
+  photos          String[]
+  completionNote  String?
+  cost            Float?
+  completedAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  hadCost         Boolean?
+  needsPurchase   Boolean?
+  nfDocument      String?
+  technician      User        @relation("AssignedTechnician", fields: [technicianId], references: [id])
+  history         OSHistory[]
+
+  @@index([technicianId])
+  @@index([status])
+  @@index([date])
+  @@index([sector])
+  @@index([createdAt])
+  @@index([status, date])
+  @@index([technicianId, status])
+}
+
+model Configuration {
+  id        String   @id @default(uuid())
+  type      String   @unique
+  values    String[]
+  updatedAt DateTime @updatedAt
+}
+
+model Budget {
+  id            String   @id @default(uuid())
+  year          Int      @unique
+  totalAmount   Float
+  monthlyAmount Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model OSHistory {
+  id            String       @id @default(uuid())
+  serviceOrderId String
+  userId        String
+  message       String
+  photos        String[]
+  createdAt     DateTime     @default(now())
+  serviceOrder  ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  user          User         @relation(fields: [userId], references: [id])
+
+  @@index([serviceOrderId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum Role {
+  ADMIN
+  OPERATOR
+}
+
+enum OSStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+enum Priority {
+  HIGH
+  MEDIUM
+  LOW
+}

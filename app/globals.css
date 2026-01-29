@@ -1,26 +1,165 @@
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700;800&display=swap');
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+
+  body {
+    @apply bg-[#ededed] text-gray-900;
+    border-color: hsl(var(--border));
+  }
+
+  * {
+    border-color: hsl(var(--border));
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  /* Botões Flutuantes */
+  .btn-float {
+    @apply fixed bottom-4 right-4 lg:bottom-8 lg:right-8 bg-primary-500 hover:bg-primary-600 
+           text-white rounded-full p-3 lg:p-4 shadow-2xl hover:shadow-glow 
+           transition-all duration-300 hover:scale-110 z-50;
+  }
+  
+  /* Cards Glassmorphism */
+  .card-glass {
+    @apply bg-white/70 backdrop-blur-xl border border-white/40 
+           rounded-2xl p-6 hover:bg-white/80 transition-all duration-300
+           shadow-soft hover:shadow-lg;
+  }
+  
+  /* Inputs Modernos */
+  .input-modern {
+    @apply bg-white/70 backdrop-blur-sm border border-gray-200 rounded-xl px-4 py-3
+           text-gray-900 placeholder-gray-400 focus:border-primary-500
+           focus:ring-2 focus:ring-primary-500/20 focus:bg-white/90 transition-all duration-200
+           w-full;
+  }
+  
+  /* Badges com Glow */
+  .badge-glow {
+    @apply px-3 py-1 rounded-full text-xs font-semibold
+           bg-gradient-to-r shadow-lg;
+  }
+  
+  .badge-high {
+    @apply badge-glow from-red-500 to-red-600 text-white shadow-red-500/50;
+  }
+  
+  .badge-medium {
+    @apply badge-glow from-yellow-500 to-yellow-600 text-white shadow-yellow-500/50;
+  }
+  
+  .badge-low {
+    @apply badge-glow from-green-500 to-green-600 text-white shadow-green-500/50;
+  }
+  
+  .badge-success {
+    @apply badge-glow from-green-500 to-green-600 text-white shadow-green-500/50;
+  }
+  
+  /* Sidebar Estilo Spotify */
+  .sidebar {
+    @apply fixed left-0 top-0 h-screen w-64 bg-white/70 backdrop-blur-xl border-r border-gray-200
+           flex flex-col p-6 space-y-6 z-40 transition-transform duration-300 ease-in-out;
+  }
+  
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl
+           text-gray-600 hover:text-gray-900 hover:bg-white/80
+           transition-all duration-200 cursor-pointer;
+  }
+  
+  .sidebar-item.active {
+    @apply bg-primary-500/10 text-primary-600 font-semibold;
+  }
+  
+  /* Kanban Cards Modernos */
+  .kanban-card {
+    @apply card-glass cursor-pointer hover:-translate-y-1;
+  }
+  
+  /* Botões Primários */
+  .btn-primary {
+    @apply bg-gradient-to-r from-primary-500 to-primary-600 
+           text-white font-semibold px-6 py-3 rounded-xl
+           hover:from-primary-600 hover:to-primary-700
+           shadow-md hover:shadow-lg transition-all duration-200
+           hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-secondary {
+    @apply bg-white/70 backdrop-blur-sm text-gray-700 font-semibold px-6 py-3 rounded-xl
+           border border-gray-200 hover:bg-white/90 hover:border-gray-300
+           transition-all duration-200;
+  }
+  
+  /* Modal Backdrop */
+  .modal-backdrop {
+    @apply fixed inset-0 bg-gray-900/30 backdrop-blur-sm z-40
+           transition-opacity duration-200;
+  }
+  
+  .modal-content {
+    @apply bg-white/90 backdrop-blur-xl rounded-3xl p-8 max-w-2xl mx-auto
+           border border-white/40 shadow-2xl
+           transition-all duration-300;
+  }
 }
