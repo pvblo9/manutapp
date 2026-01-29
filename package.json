@@ -11,6 +11,7 @@
     "start": "next start -H 0.0.0.0",
     "lint": "next lint",
     "postinstall": "prisma generate",
+    "setup-db": "node scripts/setup-database.js",
     "gerar-senha": "node scripts/gerar-senha.js",
     "gerar-senha-simples": "node scripts/gerar-senha-simples.js"
   },
