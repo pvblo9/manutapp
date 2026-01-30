@@ -22,6 +22,6 @@ export function getClientIP(request: NextRequest): string {
     return realIP
   }
 
-  // Fallback para IP do request (pode não estar disponível em serverless)
-  return request.ip || "unknown"
+  // Fallback
+  return "unknown"
 }
