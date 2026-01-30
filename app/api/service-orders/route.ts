@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db/prisma"
-import { OSStatus, Priority } from "@prisma/client"
+import { OSStatus, Priority, NotificationType } from "@prisma/client"
 import type { Prisma } from "@prisma/client"
+import { getJsonSize, getClientIP } from "@/lib/utils/responseLogger"
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,6 +15,12 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get("endDate")
     const userId = searchParams.get("userId") // ID do usuário logado
     const userRole = searchParams.get("userRole") // Role do usuário logado
+
+    // Parâmetros de paginação
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10))
+    const limitParam = parseInt(searchParams.get("limit") || "20", 10)
+    const limit = Math.min(Math.max(1, limitParam), 50) // Entre 1 e 50
+    const skip = (page - 1) * limit
 
     const where: Prisma.ServiceOrderWhereInput = {}
 
@@ -32,6 +39,11 @@ export async function GET(request: NextRequest) {
       if (endDate) where.date.lte = new Date(endDate)
     }
 
+    // Contar total de registros (para metadata de paginação)
+    const total = await prisma.serviceOrder.count({ where })
+
+    // Buscar registros paginados
+    // Otimização: não retornar photos na listagem (apenas no detalhamento)
     const serviceOrders = await prisma.serviceOrder.findMany({
       where,
       select: {
@@ -47,7 +59,7 @@ export async function GET(request: NextRequest) {
         sector: true,
         status: true,
         priority: true,
-        photos: true,
+        // photos removido da listagem para reduzir payload
         completionNote: true,
         cost: true,
         hadCost: true,
@@ -60,8 +72,7 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             name: true,
-            username: true,
-            email: true,
+            // Removido username e email da listagem (apenas no detalhamento)
             role: true,
           },
         },
@@ -69,10 +80,44 @@ export async function GET(request: NextRequest) {
       orderBy: {
         createdAt: "desc",
       },
-      take: 1000, // Limite para evitar queries muito grandes
+      skip,
+      take: limit,
     })
 
-    return NextResponse.json(serviceOrders)
+    const totalPages = Math.ceil(total / limit)
+
+    const responseData = {
+      data: serviceOrders,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    }
+
+    // Logging de consumo de banda
+    const startTime = Date.now()
+    const responseSize = getJsonSize(responseData)
+    const duration = Date.now() - startTime
+    const ip = getClientIP(request)
+    
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        method: "GET",
+        url: request.nextUrl.pathname + request.nextUrl.search,
+        ip,
+        status: 200,
+        size_kb: (responseSize / 1024).toFixed(2),
+        duration_ms: duration,
+        ...(responseSize > 1024 * 1024 && { alert: "LARGE_RESPONSE" }), // > 1MB
+      })
+    )
+
+    return NextResponse.json(responseData)
   } catch (error) {
     console.error("Error fetching service orders:", error)
     return NextResponse.json(
@@ -141,6 +186,43 @@ export async function POST(request: NextRequest) {
         },
       },
     })
+
+    // Criar notificações
+    try {
+      // Notificar o operador atribuído
+      await prisma.notification.create({
+        data: {
+          userId: technicianId,
+          type: NotificationType.NEW_OS,
+          title: "Nova Ordem de Serviço",
+          message: `Nova OS criada: ${machine} - ${machineCode}`,
+          link: `/operador?osId=${serviceOrder.id}`,
+        },
+      })
+
+      // Notificar todos os admins
+      const admins = await prisma.user.findMany({
+        where: { role: "ADMIN" },
+        select: { id: true },
+      })
+
+      await Promise.all(
+        admins.map((admin) =>
+          prisma.notification.create({
+            data: {
+              userId: admin.id,
+              type: NotificationType.NEW_OS,
+              title: "Nova Ordem de Serviço",
+              message: `Nova OS criada: ${machine} - ${machineCode} (Técnico: ${serviceOrder.technician.name})`,
+              link: `/admin?osId=${serviceOrder.id}`,
+            },
+          })
+        )
+      )
+    } catch (error) {
+      console.error("Erro ao criar notificações:", error)
+      // Não falhar a criação da OS se a notificação falhar
+    }
 
     return NextResponse.json(serviceOrder, { status: 201 })
   } catch (error) {

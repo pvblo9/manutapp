@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useCallback, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { useAuth } from "@/lib/hooks/useAuth"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
@@ -24,9 +24,31 @@ import { Textarea } from "@/components/ui/textarea"
 import { Priority } from "@prisma/client"
 import type { ServiceOrder, User, OSHistory } from "@/types"
 
-export default function AdminPage() {
+// Helper para fazer fetch suprimindo erros de rate limit
+const fetchWithRateLimitHandling = async (url: string, options?: RequestInit): Promise<Response> => {
+  try {
+    const response = await fetch(url, options)
+    // Se for rate limit, retornar response normalmente mas marcar
+    if (response.status === 429) {
+      return response // Retornar response mesmo com 429 para evitar logs do navegador
+    }
+    return response
+  } catch (error: any) {
+    // Se o erro for relacionado a rate limit, criar uma resposta fake
+    if (error?.status === 429 || error?.message?.includes("429") || error?.message?.includes("Too Many Requests")) {
+      return { ok: false, status: 429 } as Response
+    }
+    throw error
+  }
+}
+
+// Componente interno para usar useSearchParams (requer Suspense no Next.js 15)
+function AdminPageContent() {
   const { user, isLoading } = useAuth("ADMIN")
   const router = useRouter()
+  const searchParams = useSearchParams()
+  // Criar uma versão estável do osId para usar nas dependências
+  const osIdFromUrl = searchParams?.get("osId") || null
   const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([])
   const [selectedOS, setSelectedOS] = useState<ServiceOrder | null>(null)
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
@@ -56,33 +78,81 @@ export default function AdminPage() {
 
   const fetchTechnicians = useCallback(async () => {
     try {
-      const response = await fetch("/api/users")
+      const response = await fetchWithRateLimitHandling("/api/users")
+      
+      // Verificar rate limit primeiro
+      if (response.status === 429) {
+        // Rate limit - retornar silenciosamente
+        return
+      }
+      
+      if (!response.ok) {
+        // Para outros erros, logar e limpar estado
+        console.error("Erro ao buscar usuários:", response.status, response.statusText)
+        setTechnicians([])
+        return
+      }
+      
       const data = await response.json()
-      setTechnicians(data.filter((u: User) => u.role === "OPERATOR"))
-    } catch (error) {
+      
+      // Verificar se data é um array antes de fazer filter
+      if (data && Array.isArray(data)) {
+        setTechnicians(data.filter((u: User) => u.role === "OPERATOR"))
+      } else {
+        console.error("Resposta da API não é um array:", data)
+        setTechnicians([])
+      }
+    } catch (error: any) {
+      // Ignorar erros de rate limit no catch também
+      if (error?.status === 429 || error?.message?.includes("429") || error?.message?.includes("Too Many Requests")) {
+        return
+      }
       console.error("Erro ao buscar operadores:", error)
+      setTechnicians([])
     }
   }, [])
 
-  const fetchServiceOrders = useCallback(async () => {
+  const fetchServiceOrders = useCallback(async (page = 1, limit = 50) => {
     if (!user) return
     try {
-      const response = await fetch(
-        `/api/service-orders?userId=${user.id}&userRole=${user.role}`
+      const response = await fetchWithRateLimitHandling(
+        `/api/service-orders?userId=${user.id}&userRole=${user.role}&page=${page}&limit=${limit}`
       )
-      const data = await response.json()
-      setServiceOrders(data)
-    } catch (error) {
+      
+      // Verificar rate limit primeiro
+      if (response.status === 429) {
+        // Rate limit - retornar silenciosamente
+        return
+      }
+      
+      if (!response.ok) {
+        // Para outros erros, logar e limpar estado
+        console.error("Erro ao buscar OS:", response.status, response.statusText)
+        setServiceOrders([])
+        return
+      }
+      
+      const result = await response.json()
+      
+      // API agora retorna { data, pagination }
+      if (result.data && Array.isArray(result.data)) {
+        setServiceOrders(result.data)
+      } else if (Array.isArray(result)) {
+        // Fallback para compatibilidade com formato antigo
+        setServiceOrders(result)
+      } else {
+        console.error("Resposta da API não contém array de serviceOrders:", result)
+        setServiceOrders([])
+      }
+    } catch (error: any) {
+      // Ignorar erros de rate limit no catch também
+      if (error?.status === 429 || error?.message?.includes("429") || error?.message?.includes("Too Many Requests")) {
+        return
+      }
       console.error("Erro ao buscar OS:", error)
+      setServiceOrders([])
     }
   }, [user])
-
-  useEffect(() => {
-    if (user) {
-      // Buscar dados em paralelo para melhor performance
-      Promise.all([fetchTechnicians(), fetchServiceOrders()])
-    }
-  }, [user, fetchTechnicians, fetchServiceOrders])
 
   const fetchHistory = useCallback(async (osId: string) => {
     try {
@@ -93,6 +163,27 @@ export default function AdminPage() {
       console.error("Erro ao buscar histórico:", error)
     }
   }, [])
+
+  useEffect(() => {
+    if (user) {
+      // Buscar dados em paralelo para melhor performance
+      Promise.all([fetchTechnicians(), fetchServiceOrders()])
+    }
+  }, [user, fetchTechnicians, fetchServiceOrders])
+
+  // Abrir OS automaticamente se houver osId na URL
+  useEffect(() => {
+    if (osIdFromUrl && serviceOrders.length > 0 && !viewDialogOpen) {
+      const os = serviceOrders.find((o) => o.id === osIdFromUrl)
+      if (os) {
+        setSelectedOS(os)
+        setViewDialogOpen(true)
+        fetchHistory(os.id)
+        // Limpar o query param da URL após abrir
+        router.replace("/admin", { scroll: false })
+      }
+    }
+  }, [osIdFromUrl, serviceOrders, viewDialogOpen, router, fetchHistory])
 
   const handleView = (os: ServiceOrder) => {
     setSelectedOS(os)
@@ -587,6 +678,9 @@ export default function AdminPage() {
                                 alt={`Foto ${idx + 1}`}
                                 width={100}
                                 height={100}
+                                loading="lazy"
+                                placeholder="blur"
+                                blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWEREiMxUf/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
                                 className="w-full h-24 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
                                 onClick={() => {
                                   setSelectedPhoto(photo)
@@ -684,6 +778,9 @@ export default function AdminPage() {
                         alt={`Foto ${index + 1}`}
                         width={100}
                         height={100}
+                        loading="lazy"
+                        placeholder="blur"
+                        blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWEREiMxUf/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
                         className="w-full h-32 object-cover rounded-xl border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={() => {
                           setSelectedPhoto(photo)
@@ -950,5 +1047,21 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
     </AppLayout>
+  )
+}
+
+// Componente principal com Suspense boundary (requerido pelo Next.js 15 para useSearchParams)
+export default function AdminPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    }>
+      <AdminPageContent />
+    </Suspense>
   )
 }

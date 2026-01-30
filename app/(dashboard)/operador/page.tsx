@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useCallback, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { useAuth } from "@/lib/hooks/useAuth"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
@@ -21,9 +21,11 @@ import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import type { ServiceOrder, OSHistory } from "@/types"
 
-export default function OperadorPage() {
+// Componente interno para usar useSearchParams (requer Suspense no Next.js 15)
+function OperadorPageContent() {
   const { user, isLoading } = useAuth("OPERATOR")
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([])
   const [selectedOS, setSelectedOS] = useState<ServiceOrder | null>(null)
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
@@ -40,22 +42,60 @@ export default function OperadorPage() {
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false)
 
+  // Declarar fetchHistory primeiro para evitar erros de inicialização
+  const fetchHistory = useCallback(async (osId: string) => {
+    try {
+      const response = await fetch(`/api/service-orders/${osId}/history`)
+      const data = await response.json()
+      setHistory(data)
+    } catch (error) {
+      console.error("Erro ao buscar histórico:", error)
+    }
+  }, [])
+
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/login")
     }
   }, [user, isLoading, router])
 
-  const fetchServiceOrders = useCallback(async () => {
+  const fetchServiceOrders = useCallback(async (page = 1, limit = 50) => {
     if (!user) return
     try {
       const response = await fetch(
-        `/api/service-orders?userId=${user.id}&userRole=${user.role}`
+        `/api/service-orders?userId=${user.id}&userRole=${user.role}&page=${page}&limit=${limit}`
       )
-      const data = await response.json()
-      setServiceOrders(data)
+      
+      if (!response.ok) {
+        // Verificar rate limit primeiro
+        if (response.status === 429) {
+          // Rate limit - não logar como erro, apenas warning
+          // Não atualizar estado - manter OS atuais
+          console.warn("Rate limit atingido ao buscar OS. Aguardando...")
+          return
+        }
+        
+        // Para outros erros, logar e limpar estado
+        console.error("Erro ao buscar OS:", response.status, response.statusText)
+        setServiceOrders([])
+        return
+      }
+      
+      const result = await response.json()
+      
+      // API agora retorna { data, pagination }
+      if (result.data && Array.isArray(result.data)) {
+        setServiceOrders(result.data)
+      } else if (Array.isArray(result)) {
+        // Fallback para compatibilidade com formato antigo
+        setServiceOrders(result)
+      } else {
+        console.error("Resposta da API não contém array de serviceOrders:", result)
+        setServiceOrders([])
+      }
     } catch (error) {
       console.error("Erro ao buscar OS:", error)
+      setServiceOrders([])
     }
   }, [user])
 
@@ -64,6 +104,24 @@ export default function OperadorPage() {
       fetchServiceOrders()
     }
   }, [user, fetchServiceOrders])
+
+  // Criar uma versão estável do osId para usar nas dependências
+  const osIdFromUrl = searchParams?.get("osId") || null
+
+  // Abrir OS automaticamente se houver osId na URL
+  useEffect(() => {
+    if (osIdFromUrl && serviceOrders.length > 0 && !viewDialogOpen) {
+      const os = serviceOrders.find((o) => o.id === osIdFromUrl)
+      if (os) {
+        setSelectedOS(os)
+        setNeedsPurchase(os.needsPurchase || false)
+        setViewDialogOpen(true)
+        fetchHistory(os.id)
+        // Limpar o query param da URL após abrir
+        router.replace("/operador", { scroll: false })
+      }
+    }
+  }, [osIdFromUrl, serviceOrders, viewDialogOpen, router, fetchHistory])
 
   // Filtrar OS por custo (apenas OS finalizadas têm hadCost definido)
   const filteredServiceOrders = serviceOrders.filter((os) => {
@@ -74,16 +132,6 @@ export default function OperadorPage() {
     if (costFilter === "without-cost") return os.hadCost === false
     return false
   })
-
-  const fetchHistory = useCallback(async (osId: string) => {
-    try {
-      const response = await fetch(`/api/service-orders/${osId}/history`)
-      const data = await response.json()
-      setHistory(data)
-    } catch (error) {
-      console.error("Erro ao buscar histórico:", error)
-    }
-  }, [])
 
   const handleView = (os: ServiceOrder) => {
     setSelectedOS(os)
@@ -402,6 +450,9 @@ export default function OperadorPage() {
                                 alt={`Foto ${idx + 1}`}
                                 width={100}
                                 height={100}
+                                loading="lazy"
+                                placeholder="blur"
+                                blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWEREiMxUf/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
                                 className="w-full h-24 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
                                 onClick={() => {
                                   setSelectedPhoto(photo)
@@ -477,6 +528,9 @@ export default function OperadorPage() {
                         alt={`Foto ${index + 1}`}
                         width={100}
                         height={100}
+                        loading="lazy"
+                        placeholder="blur"
+                        blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWEREiMxUf/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
                         className="w-full h-32 object-cover rounded-xl border border-white/10 cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={() => {
                           setSelectedPhoto(photo)
@@ -590,5 +644,21 @@ export default function OperadorPage() {
         </DialogContent>
       </Dialog>
     </AppLayout>
+  )
+}
+
+// Componente principal com Suspense boundary (requerido pelo Next.js 15 para useSearchParams)
+export default function OperadorPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    }>
+      <OperadorPageContent />
+    </Suspense>
   )
 }

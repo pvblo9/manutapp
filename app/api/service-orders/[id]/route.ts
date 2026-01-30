@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db/prisma"
-import { OSStatus, Priority } from "@prisma/client"
+import { OSStatus, Priority, NotificationType } from "@prisma/client"
 import type { Prisma } from "@prisma/client"
 
 export async function GET(
@@ -68,8 +68,21 @@ export async function PATCH(
     if (body.hadCost !== undefined) {
       updateData.hadCost = body.hadCost === true || body.hadCost === "true"
     }
+    let needsPurchaseChanged = false
+    let previousNeedsPurchase = false
+    
     if (body.needsPurchase !== undefined) {
-      updateData.needsPurchase = body.needsPurchase === true || body.needsPurchase === "true"
+      // Buscar valor anterior para verificar se mudou
+      const currentOS = await prisma.serviceOrder.findUnique({
+        where: { id },
+        select: { needsPurchase: true, machine: true, machineCode: true },
+      })
+      
+      previousNeedsPurchase = currentOS?.needsPurchase || false
+      const newNeedsPurchase = body.needsPurchase === true || body.needsPurchase === "true"
+      needsPurchaseChanged = previousNeedsPurchase !== newNeedsPurchase
+      
+      updateData.needsPurchase = newNeedsPurchase
     }
     if (body.nfDocument !== undefined) {
       updateData.nfDocument = body.nfDocument
@@ -101,6 +114,32 @@ export async function PATCH(
         },
       },
     })
+
+    // Se needsPurchase foi marcado como true, notificar admins
+    if (needsPurchaseChanged && serviceOrder.needsPurchase) {
+      try {
+        const admins = await prisma.user.findMany({
+          where: { role: "ADMIN" },
+          select: { id: true },
+        })
+
+        await Promise.all(
+          admins.map((admin) =>
+            prisma.notification.create({
+              data: {
+                userId: admin.id,
+                type: NotificationType.OS_NEEDS_PURCHASE,
+                title: "OS Requer Compra",
+                message: `A OS ${serviceOrder.machine} - ${serviceOrder.machineCode} requer compra de peças`,
+                link: `/admin?osId=${id}`,
+              },
+            })
+          )
+        )
+      } catch (error) {
+        console.error("Erro ao criar notificação de compra necessária:", error)
+      }
+    }
 
     return NextResponse.json(serviceOrder)
   } catch (error) {

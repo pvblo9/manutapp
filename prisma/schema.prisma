@@ -17,6 +17,7 @@ model User {
   updatedAt  DateTime       @updatedAt
   assignedOS ServiceOrder[] @relation("AssignedTechnician")
   osHistory  OSHistory[]
+  notifications Notification[]
 }
 
 model ServiceOrder {
@@ -99,4 +100,29 @@ enum Priority {
   HIGH
   MEDIUM
   LOW
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  link      String?  // Link para a OS ou página relacionada
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+  @@index([userId, read])
+}
+
+enum NotificationType {
+  NEW_OS              // Nova OS criada
+  OS_COMMENT          // Comentário em OS
+  OS_NEEDS_PURCHASE   // OS marcada como necessária compra
+  OS_COMPLETED        // OS finalizada
+  OS_UPDATED          // OS atualizada
 }

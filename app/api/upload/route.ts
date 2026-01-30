@@ -2,9 +2,32 @@ import { NextRequest, NextResponse } from "next/server"
 import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 import { existsSync } from "fs"
+import sharp from "sharp"
+import { rateLimiter, getClientIP } from "@/lib/utils/rateLimit"
+import { getClientIP as getIPForLogging } from "@/lib/utils/responseLogger"
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting específico para uploads: 10 uploads por hora por IP
+    const ip = getClientIP(request)
+    const uploadLimit = rateLimiter.check(ip, 10, 60 * 60 * 1000) // 10 por hora
+
+    if (!uploadLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: "Limite de uploads excedido. Você pode fazer até 10 uploads por hora.",
+          retryAfter: Math.ceil((uploadLimit.resetAt - Date.now()) / 1000),
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": Math.ceil((uploadLimit.resetAt - Date.now()) / 1000).toString(),
+            "X-RateLimit-Limit": "10",
+            "X-RateLimit-Remaining": uploadLimit.remaining.toString(),
+          },
+        }
+      )
+    }
     const formData = await request.formData()
     const files = formData.getAll("files") as File[]
     const osId = formData.get("osId") as string
@@ -31,47 +54,115 @@ export async function POST(request: NextRequest) {
     }
 
     const uploadDir = join(process.cwd(), "public", "uploads", "service-orders", osId)
+    const thumbnailsDir = join(uploadDir, "thumbnails")
 
-    // Criar diretório se não existir
+    // Criar diretórios se não existirem
     if (!existsSync(uploadDir)) {
       await mkdir(uploadDir, { recursive: true })
+    }
+    if (!existsSync(thumbnailsDir)) {
+      await mkdir(thumbnailsDir, { recursive: true })
     }
 
     const uploadedFiles: string[] = []
 
     for (const file of files) {
-      // Validar tipo de arquivo
-      const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+      // Validar tipo de arquivo (apenas imagens)
+      const validTypes = ["image/jpeg", "image/jpg", "image/png"]
       if (!validTypes.includes(file.type)) {
         return NextResponse.json(
-          { error: `Tipo de arquivo inválido: ${file.name}. Use JPG, PNG ou WEBP` },
+          { error: `Tipo de arquivo inválido: ${file.name}. Use JPG ou PNG` },
           { status: 400 }
         )
       }
 
-      // Validar tamanho (5MB)
-      if (file.size > 5 * 1024 * 1024) {
+      // Validar tamanho (reduzido para 2MB)
+      const maxSize = 2 * 1024 * 1024 // 2MB
+      if (file.size > maxSize) {
         return NextResponse.json(
-          { error: `Arquivo muito grande: ${file.name}. Máximo 5MB` },
+          { error: `Arquivo muito grande: ${file.name}. Máximo 2MB` },
           { status: 400 }
         )
       }
 
       const bytes = await file.arrayBuffer()
-      const buffer = Buffer.from(bytes)
+      const originalBuffer = Buffer.from(bytes)
+      const originalSizeKB = (originalBuffer.length / 1024).toFixed(2)
 
+      // Processar imagem com Sharp
       const timestamp = Date.now()
       const originalName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
-      const filename = `${timestamp}-${originalName}`
+      const baseFilename = `${timestamp}-${originalName.replace(/\.[^/.]+$/, "")}`
+
+      // Comprimir imagem principal: WebP, qualidade 80%, max 800px largura
+      const compressedBuffer = await sharp(originalBuffer)
+        .resize(800, null, {
+          withoutEnlargement: true,
+          fit: "inside",
+        })
+        .webp({ quality: 80 })
+        .toBuffer()
+
+      const compressedSizeKB = (compressedBuffer.length / 1024).toFixed(2)
+      const filename = `${baseFilename}.webp`
       const filepath = join(uploadDir, filename)
 
-      await writeFile(filepath, buffer)
+      // Gerar thumbnail: 200px para listagens
+      const thumbnailBuffer = await sharp(originalBuffer)
+        .resize(200, 200, {
+          fit: "cover",
+          position: "center",
+        })
+        .webp({ quality: 75 })
+        .toBuffer()
+
+      const thumbnailFilename = `${baseFilename}-thumb.webp`
+      const thumbnailPath = join(thumbnailsDir, thumbnailFilename)
+
+      // Salvar arquivos
+      await writeFile(filepath, compressedBuffer)
+      await writeFile(thumbnailPath, thumbnailBuffer)
+
+      // Log de compressão
+      console.log(
+        JSON.stringify({
+          type: "IMAGE_COMPRESSION",
+          filename: file.name,
+          original_size_kb: originalSizeKB,
+          compressed_size_kb: compressedSizeKB,
+          reduction_percent: (
+            ((originalBuffer.length - compressedBuffer.length) / originalBuffer.length) *
+            100
+          ).toFixed(2),
+        })
+      )
 
       const publicUrl = `/uploads/service-orders/${osId}/${filename}`
       uploadedFiles.push(publicUrl)
     }
 
-    return NextResponse.json({ urls: uploadedFiles })
+    const responseData = { urls: uploadedFiles }
+    
+    // Logging de consumo de banda
+    const startTime = Date.now()
+    const responseSize = Buffer.byteLength(JSON.stringify(responseData), "utf8")
+    const duration = Date.now() - startTime
+    
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        method: "POST",
+        url: request.nextUrl.pathname,
+        ip: getIPForLogging(request),
+        status: 200,
+        size_kb: (responseSize / 1024).toFixed(2),
+        duration_ms: duration,
+        files_uploaded: uploadedFiles.length,
+        ...(responseSize > 1024 * 1024 && { alert: "LARGE_RESPONSE" }), // > 1MB
+      })
+    )
+
+    return NextResponse.json(responseData)
   } catch (error) {
     console.error("Error uploading files:", error)
     return NextResponse.json(

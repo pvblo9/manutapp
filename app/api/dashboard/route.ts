@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma"
 import { format, endOfMonth, eachMonthOfInterval, startOfYear } from "date-fns"
 import { ptBR } from "date-fns/locale/pt-BR"
 import type { Prisma } from "@prisma/client"
+import { getJsonSize, getClientIP } from "@/lib/utils/responseLogger"
 
 export async function GET(request: NextRequest) {
   try {
@@ -134,7 +135,7 @@ export async function GET(request: NextRequest) {
 
     const monthlyEvolution = await Promise.all(monthlyEvolutionPromises)
 
-    return NextResponse.json({
+    const responseData = {
       stats: {
         totalCompleted,
         totalSpent,
@@ -148,7 +149,28 @@ export async function GET(request: NextRequest) {
         monthlyEvolution,
         osByType,
       },
-    })
+    }
+
+    // Logging de consumo de banda
+    const startTime = Date.now()
+    const responseSize = getJsonSize(responseData)
+    const duration = Date.now() - startTime
+    const ip = getClientIP(request)
+    
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        method: "GET",
+        url: request.nextUrl.pathname + request.nextUrl.search,
+        ip,
+        status: 200,
+        size_kb: (responseSize / 1024).toFixed(2),
+        duration_ms: duration,
+        ...(responseSize > 1024 * 1024 && { alert: "LARGE_RESPONSE" }), // > 1MB
+      })
+    )
+
+    return NextResponse.json(responseData)
   } catch (error) {
     console.error("Error fetching dashboard data:", error)
     return NextResponse.json(

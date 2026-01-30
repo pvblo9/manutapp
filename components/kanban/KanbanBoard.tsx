@@ -28,7 +28,7 @@ import { CSS } from "@dnd-kit/utilities"
 import type { ServiceOrder, User } from "@/types"
 
 interface KanbanBoardProps {
-  serviceOrders: ServiceOrder[]
+  serviceOrders?: ServiceOrder[]
   onView?: (os: ServiceOrder) => void
   onEdit?: (os: ServiceOrder) => void
   onComplete?: (os: ServiceOrder) => void
@@ -154,7 +154,15 @@ export function KanbanBoard({
   )
 
   const filteredOrders = useMemo(() => {
-    let filtered = [...serviceOrders]
+    // Garantir que serviceOrders é um array válido (com valor padrão)
+    const orders = serviceOrders || []
+    
+    if (!Array.isArray(orders)) {
+      console.warn("serviceOrders não é um array:", orders)
+      return []
+    }
+    
+    let filtered = [...orders]
 
     if (filters.status) {
       filtered = filtered.filter((os) => os.status === filters.status)

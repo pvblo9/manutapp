@@ -5,6 +5,8 @@ import { Home, ClipboardList, Settings, BarChart3, LogOut, Menu, X } from "lucid
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/hooks/useAuth"
+import { NotificationBell } from "@/components/notifications/NotificationBell"
+import { NotificationMenuItem } from "@/components/notifications/NotificationMenuItem"
 
 export function AppLayout({
   children,
@@ -65,7 +67,7 @@ export function AppLayout({
             <>
               <Link
                 href="/admin"
-                className={`sidebar-item ${isActive("/admin") && !pathname.includes("dashboard") && !pathname.includes("configuracoes") ? "active" : ""}`}
+                className={`sidebar-item ${isActive("/admin") && !pathname.includes("dashboard") && !pathname.includes("configuracoes") && !pathname.includes("notificacoes") ? "active" : ""}`}
                 onClick={() => setSidebarOpen(false)}
               >
                 <ClipboardList size={20} />
@@ -87,6 +89,7 @@ export function AppLayout({
                 <Settings size={20} />
                 <span>Configurações</span>
               </Link>
+              <NotificationMenuItem onNavigate={() => setSidebarOpen(false)} />
             </>
           )}
         </nav>
@@ -97,7 +100,14 @@ export function AppLayout({
         </button>
       </aside>
 
-      <main className="lg:ml-64 p-4 lg:p-8 pt-16 lg:pt-8">{children}</main>
+      {/* Header com notificações */}
+      <header className="fixed top-0 right-0 left-0 lg:left-64 h-16 bg-white/95 backdrop-blur-sm border-b border-gray-200 z-30 flex items-center justify-end px-4 lg:px-8 shadow-sm">
+        <div className="flex items-center gap-4">
+          <NotificationBell />
+        </div>
+      </header>
+
+      <main className="lg:ml-64 p-4 lg:p-8 pt-20 lg:pt-20">{children}</main>
     </div>
   )
 }

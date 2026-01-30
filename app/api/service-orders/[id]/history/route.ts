@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db/prisma"
+import { NotificationType } from "@prisma/client"
 
 // GET - Listar histórico de uma OS
 export async function GET(
@@ -52,6 +53,30 @@ export async function POST(
       )
     }
 
+    // Buscar informações da OS e do usuário
+    const [serviceOrder, user] = await Promise.all([
+      prisma.serviceOrder.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          machine: true,
+          machineCode: true,
+          technicianId: true,
+        },
+      }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, role: true },
+      }),
+    ])
+
+    if (!serviceOrder || !user) {
+      return NextResponse.json(
+        { error: "OS ou usuário não encontrado" },
+        { status: 404 }
+      )
+    }
+
     const historyEntry = await prisma.oSHistory.create({
       data: {
         serviceOrderId: id,
@@ -70,6 +95,32 @@ export async function POST(
         },
       },
     })
+
+    // Se operador comentou, notificar admins
+    if (user.role === "OPERATOR") {
+      try {
+        const admins = await prisma.user.findMany({
+          where: { role: "ADMIN" },
+          select: { id: true },
+        })
+
+        await Promise.all(
+          admins.map((admin) =>
+            prisma.notification.create({
+              data: {
+                userId: admin.id,
+                type: NotificationType.OS_COMMENT,
+                title: "Novo Comentário em OS",
+                message: `${user.name} comentou na OS ${serviceOrder.machine} - ${serviceOrder.machineCode}`,
+                link: `/admin?osId=${id}`,
+              },
+            })
+          )
+        )
+      } catch (error) {
+        console.error("Erro ao criar notificação de comentário:", error)
+      }
+    }
 
     return NextResponse.json(historyEntry)
   } catch (error) {
