@@ -37,6 +37,8 @@ export function CloudinaryImage({
     // Extrair o public_id da URL do Cloudinary
     // Formato: https://res.cloudinary.com/cloud_name/image/upload/v1234567890/folder/image.webp
     // ou: https://res.cloudinary.com/cloud_name/image/upload/folder/image.webp
+    let publicId: string | null = null
+    
     try {
       const url = new URL(src)
       const pathParts = url.pathname.split('/')
@@ -46,31 +48,33 @@ export function CloudinaryImage({
         // Pegar tudo depois de 'upload'
         const pathAfterUpload = pathParts.slice(uploadIndex + 1).join('/')
         // Remover extensão e versão se houver
-        const publicId = pathAfterUpload
+        publicId = pathAfterUpload
           .replace(/^v\d+\//, '') // Remove versão (v1234567890/)
           .replace(/\.(webp|jpg|jpeg|png|gif)$/i, '') // Remove extensão
-
-        return (
-          <CldImage
-            src={publicId}
-            alt={alt}
-            width={width}
-            height={height}
-            className={className}
-            loading={loading}
-            onClick={onClick}
-            crop={{
-              type: 'auto',
-              source: true,
-            }}
-            format="auto"
-            quality="auto"
-          />
-        )
       }
     } catch (error) {
       console.warn('[CloudinaryImage] Erro ao processar URL do Cloudinary:', error)
       // Fallback para Image normal se houver erro
+    }
+
+    if (publicId) {
+      return (
+        <CldImage
+          src={publicId}
+          alt={alt}
+          width={width}
+          height={height}
+          className={className}
+          loading={loading}
+          onClick={onClick}
+          crop={{
+            type: 'auto',
+            source: true,
+          }}
+          format="auto"
+          quality="auto"
+        />
+      )
     }
   }
 

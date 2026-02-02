@@ -444,15 +444,13 @@ function OperadorPageContent() {
                         {entry.photos && entry.photos.length > 0 && (
                           <div className="grid grid-cols-2 gap-2 mt-2">
                             {entry.photos.map((photo, idx) => (
-                              <Image
+                              <CloudinaryImage
                                 key={idx}
                                 src={photo}
                                 alt={`Foto ${idx + 1}`}
                                 width={100}
                                 height={100}
                                 loading="lazy"
-                                placeholder="blur"
-                                blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWEREiMxUf/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
                                 className="w-full h-24 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
                                 onClick={() => {
                                   setSelectedPhoto(photo)
@@ -486,12 +484,10 @@ function OperadorPageContent() {
                     {commentPhotoPreviews.length > 0 && (
                       <div className="grid grid-cols-3 gap-2 mt-2">
                         {commentPhotoPreviews.map((preview, idx) => (
-                          <Image
+                          <img
                             key={idx}
                             src={preview}
                             alt={`Preview ${idx + 1}`}
-                            width={100}
-                            height={100}
                             className="w-full h-20 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
                             onClick={() => {
                               setSelectedPhoto(preview)
