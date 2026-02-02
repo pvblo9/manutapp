@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import Image from "next/image"
+import { CloudinaryImage } from "@/components/ui/CloudinaryImage"
 import { useAuth } from "@/lib/hooks/useAuth"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -522,15 +522,13 @@ function OperadorPageContent() {
                   <p className="text-xs text-gray-600 mb-3 font-semibold">Fotos</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 lg:gap-3">
                     {selectedOS.photos.map((photo: string, index: number) => (
-                      <Image
+                      <CloudinaryImage
                         key={index}
                         src={photo}
                         alt={`Foto ${index + 1}`}
                         width={100}
                         height={100}
                         loading="lazy"
-                        placeholder="blur"
-                        blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWEREiMxUf/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
                         className="w-full h-32 object-cover rounded-xl border border-white/10 cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={() => {
                           setSelectedPhoto(photo)
@@ -563,7 +561,7 @@ function OperadorPageContent() {
         <DialogContent className="max-w-4xl bg-black/95 border-gray-800 p-0">
           {selectedPhoto && (
             <div className="relative">
-              <Image
+              <CloudinaryImage
                 src={selectedPhoto}
                 alt="Foto ampliada"
                 width={1200}

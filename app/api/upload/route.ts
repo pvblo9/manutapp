@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { writeFile, mkdir } from "fs/promises"
-import { join } from "path"
-import { existsSync } from "fs"
 import sharp from "sharp"
 import { rateLimiter, getClientIP } from "@/lib/utils/rateLimit"
 import { getClientIP as getIPForLogging } from "@/lib/utils/responseLogger"
+import { uploadToCloudinary, uploadThumbnailToCloudinary } from "@/lib/cloudinary"
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,92 +51,110 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const uploadDir = join(process.cwd(), "public", "uploads", "service-orders", osId)
-    const thumbnailsDir = join(uploadDir, "thumbnails")
-
-    // Criar diretórios se não existirem
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true })
-    }
-    if (!existsSync(thumbnailsDir)) {
-      await mkdir(thumbnailsDir, { recursive: true })
+    // Verificar se as variáveis de ambiente do Cloudinary estão configuradas
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      console.error("[Upload] Variáveis de ambiente do Cloudinary não configuradas")
+      return NextResponse.json(
+        { error: "Configuração do Cloudinary não encontrada. Contate o administrador." },
+        { status: 500 }
+      )
     }
 
     const uploadedFiles: string[] = []
+    const folder = `manutapp/os-photos/${osId}`
 
     for (const file of files) {
-      // Validar tipo de arquivo (apenas imagens)
-      const validTypes = ["image/jpeg", "image/jpg", "image/png"]
-      if (!validTypes.includes(file.type)) {
+      try {
+        // Validar tipo de arquivo (apenas imagens)
+        const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+        if (!validTypes.includes(file.type)) {
+          return NextResponse.json(
+            { error: `Tipo de arquivo inválido: ${file.name}. Use JPG, PNG ou WEBP` },
+            { status: 400 }
+          )
+        }
+
+        // Validar tamanho (aumentado para 5MB, Cloudinary suporta)
+        const maxSize = 5 * 1024 * 1024 // 5MB
+        if (file.size > maxSize) {
+          return NextResponse.json(
+            { error: `Arquivo muito grande: ${file.name}. Máximo 5MB` },
+            { status: 400 }
+          )
+        }
+
+        const bytes = await file.arrayBuffer()
+        const originalBuffer = Buffer.from(bytes)
+        const originalSizeKB = (originalBuffer.length / 1024).toFixed(2)
+
+        // Processar imagem com Sharp antes do upload
+        const timestamp = Date.now()
+        const originalName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
+        const baseFilename = `${timestamp}-${originalName.replace(/\.[^/.]+$/, "")}`
+
+        // Comprimir imagem principal: WebP, qualidade 80%, max 1200px largura (Cloudinary otimiza depois)
+        const compressedBuffer = await sharp(originalBuffer)
+          .resize(1200, null, {
+            withoutEnlargement: true,
+            fit: "inside",
+          })
+          .webp({ quality: 80 })
+          .toBuffer()
+
+        const compressedSizeKB = (compressedBuffer.length / 1024).toFixed(2)
+
+        // Gerar thumbnail: 200px para listagens
+        const thumbnailBuffer = await sharp(originalBuffer)
+          .resize(200, 200, {
+            fit: "cover",
+            position: "center",
+          })
+          .webp({ quality: 75 })
+          .toBuffer()
+
+        // Upload para Cloudinary
+        console.log(`[Upload] Fazendo upload para Cloudinary: ${baseFilename}`)
+        
+        // Upload da imagem principal
+        const imageUrl = await uploadToCloudinary(
+          compressedBuffer,
+          folder,
+          baseFilename
+        )
+
+        // Upload da thumbnail (opcional - Cloudinary pode gerar thumbnails on-demand)
+        // Mas vamos fazer upload para ter controle
+        const thumbnailPublicId = `${baseFilename}-thumb`
+        await uploadThumbnailToCloudinary(
+          thumbnailBuffer,
+          folder,
+          thumbnailPublicId
+        )
+
+        // Log de compressão e upload
+        console.log(
+          JSON.stringify({
+            type: "IMAGE_UPLOAD_CLOUDINARY",
+            filename: file.name,
+            original_size_kb: originalSizeKB,
+            compressed_size_kb: compressedSizeKB,
+            reduction_percent: (
+              ((originalBuffer.length - compressedBuffer.length) / originalBuffer.length) *
+              100
+            ).toFixed(2),
+            cloudinary_url: imageUrl,
+            os_id: osId,
+          })
+        )
+
+        uploadedFiles.push(imageUrl)
+      } catch (error) {
+        console.error(`[Upload] Erro ao processar arquivo ${file.name}:`, error)
         return NextResponse.json(
-          { error: `Tipo de arquivo inválido: ${file.name}. Use JPG ou PNG` },
-          { status: 400 }
+          { error: `Erro ao fazer upload de ${file.name}: ${error instanceof Error ? error.message : 'Erro desconhecido'}` },
+          { status: 500 }
         )
       }
-
-      // Validar tamanho (reduzido para 2MB)
-      const maxSize = 2 * 1024 * 1024 // 2MB
-      if (file.size > maxSize) {
-        return NextResponse.json(
-          { error: `Arquivo muito grande: ${file.name}. Máximo 2MB` },
-          { status: 400 }
-        )
-      }
-
-      const bytes = await file.arrayBuffer()
-      const originalBuffer = Buffer.from(bytes)
-      const originalSizeKB = (originalBuffer.length / 1024).toFixed(2)
-
-      // Processar imagem com Sharp
-      const timestamp = Date.now()
-      const originalName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
-      const baseFilename = `${timestamp}-${originalName.replace(/\.[^/.]+$/, "")}`
-
-      // Comprimir imagem principal: WebP, qualidade 80%, max 800px largura
-      const compressedBuffer = await sharp(originalBuffer)
-        .resize(800, null, {
-          withoutEnlargement: true,
-          fit: "inside",
-        })
-        .webp({ quality: 80 })
-        .toBuffer()
-
-      const compressedSizeKB = (compressedBuffer.length / 1024).toFixed(2)
-      const filename = `${baseFilename}.webp`
-      const filepath = join(uploadDir, filename)
-
-      // Gerar thumbnail: 200px para listagens
-      const thumbnailBuffer = await sharp(originalBuffer)
-        .resize(200, 200, {
-          fit: "cover",
-          position: "center",
-        })
-        .webp({ quality: 75 })
-        .toBuffer()
-
-      const thumbnailFilename = `${baseFilename}-thumb.webp`
-      const thumbnailPath = join(thumbnailsDir, thumbnailFilename)
-
-      // Salvar arquivos
-      await writeFile(filepath, compressedBuffer)
-      await writeFile(thumbnailPath, thumbnailBuffer)
-
-      // Log de compressão
-      console.log(
-        JSON.stringify({
-          type: "IMAGE_COMPRESSION",
-          filename: file.name,
-          original_size_kb: originalSizeKB,
-          compressed_size_kb: compressedSizeKB,
-          reduction_percent: (
-            ((originalBuffer.length - compressedBuffer.length) / originalBuffer.length) *
-            100
-          ).toFixed(2),
-        })
-      )
-
-      const publicUrl = `/uploads/service-orders/${osId}/${filename}`
-      uploadedFiles.push(publicUrl)
     }
 
     const responseData = { urls: uploadedFiles }

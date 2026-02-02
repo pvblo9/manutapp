@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select } from "@/components/ui/select"
 import { format } from "date-fns"
-import Image from "next/image"
+import { CloudinaryImage } from "@/components/ui/CloudinaryImage"
 import { Priority } from "@prisma/client"
 import type { Configuration, User } from "@/types"
 
@@ -360,7 +360,7 @@ export function ServiceOrderForm({
               <div className="mt-2 flex flex-wrap gap-2">
                 {photos.map((photo, index) => (
                   <div key={index} className="relative">
-                      <Image
+                      <CloudinaryImage
                         src={photo}
                         alt={`Foto ${index + 1}`}
                         width={80}
