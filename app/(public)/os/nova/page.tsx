@@ -83,10 +83,10 @@ export default function NovaOSPage() {
         <Card className="bg-white/70 backdrop-blur-xl border border-white/40 shadow-soft">
           <CardHeader>
             <CardTitle className="text-3xl font-display font-bold text-gray-900">
-              Nova Ordem de Serviço
+              Nova Ordem de Manutenção
             </CardTitle>
             <CardDescription className="text-gray-600 text-base">
-              Preencha os dados abaixo para abrir uma nova ordem de serviço
+              Preencha os dados abaixo para abrir uma nova ordem de manutenção
             </CardDescription>
           </CardHeader>
           <CardContent>
