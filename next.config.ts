@@ -18,7 +18,11 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**', // Permitir apenas HTTPS
+        hostname: 'res.cloudinary.com', // Cloudinary CDN
+      },
+      {
+        protocol: 'https',
+        hostname: '**.cloudinary.com', // Subdomínios do Cloudinary
       },
     ],
     // Limitar tamanho máximo de imagem para prevenir DoS
