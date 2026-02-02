@@ -133,9 +133,25 @@ function OperadorPageContent() {
     return false
   })
 
-  const handleView = (os: ServiceOrder) => {
-    setSelectedOS(os)
-    setNeedsPurchase(os.needsPurchase || false)
+  const handleView = async (os: ServiceOrder) => {
+    // Buscar OS completa do servidor para garantir que tem as fotos atualizadas
+    try {
+      const response = await fetch(`/api/service-orders/${os.id}`)
+      if (response.ok) {
+        const fullOS = await response.json()
+        setSelectedOS(fullOS)
+        setNeedsPurchase(fullOS.needsPurchase || false)
+      } else {
+        // Fallback para OS do estado local se falhar
+        setSelectedOS(os)
+        setNeedsPurchase(os.needsPurchase || false)
+      }
+    } catch (error) {
+      console.error("Erro ao buscar OS completa:", error)
+      // Fallback para OS do estado local se falhar
+      setSelectedOS(os)
+      setNeedsPurchase(os.needsPurchase || false)
+    }
     setViewDialogOpen(true)
     fetchHistory(os.id)
   }

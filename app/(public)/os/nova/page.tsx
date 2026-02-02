@@ -46,14 +46,26 @@ export default function NovaOSPage() {
 
         if (uploadResponse.ok) {
           const uploadResult = await uploadResponse.json()
+          console.log("[NovaOS] Upload bem-sucedido, URLs:", uploadResult.urls)
+          
           // Atualizar OS com as URLs das fotos
-          await fetch(`/api/service-orders/${createdOS.id}`, {
+          const updateResponse = await fetch(`/api/service-orders/${createdOS.id}`, {
             method: "PATCH",
             headers: {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ photos: uploadResult.urls }),
           })
+
+          if (updateResponse.ok) {
+            const updatedOS = await updateResponse.json()
+            console.log("[NovaOS] OS atualizada com fotos:", updatedOS.photos)
+          } else {
+            console.error("[NovaOS] Erro ao atualizar OS com fotos:", await updateResponse.text())
+          }
+        } else {
+          const errorText = await uploadResponse.text()
+          console.error("[NovaOS] Erro no upload:", errorText)
         }
       }
 

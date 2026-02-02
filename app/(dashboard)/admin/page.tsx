@@ -177,17 +177,49 @@ function AdminPageContent() {
     if (osIdFromUrl && serviceOrders.length > 0 && !viewDialogOpen) {
       const os = serviceOrders.find((o) => o.id === osIdFromUrl)
       if (os) {
-        setSelectedOS(os)
-        setViewDialogOpen(true)
-        fetchHistory(os.id)
-        // Limpar o query param da URL após abrir
-        router.replace("/admin", { scroll: false })
+        // Buscar OS completa do servidor para garantir que tem as fotos atualizadas
+        fetch(`/api/service-orders/${os.id}`)
+          .then(response => {
+            if (response.ok) {
+              return response.json()
+            }
+            return os // Fallback para OS do estado local
+          })
+          .then(fullOS => {
+            setSelectedOS(fullOS)
+            setViewDialogOpen(true)
+            fetchHistory(fullOS.id)
+            // Limpar o query param da URL após abrir
+            router.replace("/admin", { scroll: false })
+          })
+          .catch(error => {
+            console.error("Erro ao buscar OS completa:", error)
+            // Fallback para OS do estado local
+            setSelectedOS(os)
+            setViewDialogOpen(true)
+            fetchHistory(os.id)
+            router.replace("/admin", { scroll: false })
+          })
       }
     }
   }, [osIdFromUrl, serviceOrders, viewDialogOpen, router, fetchHistory])
 
-  const handleView = (os: ServiceOrder) => {
-    setSelectedOS(os)
+  const handleView = async (os: ServiceOrder) => {
+    // Buscar OS completa do servidor para garantir que tem as fotos atualizadas
+    try {
+      const response = await fetch(`/api/service-orders/${os.id}`)
+      if (response.ok) {
+        const fullOS = await response.json()
+        setSelectedOS(fullOS)
+      } else {
+        // Fallback para OS do estado local se falhar
+        setSelectedOS(os)
+      }
+    } catch (error) {
+      console.error("Erro ao buscar OS completa:", error)
+      // Fallback para OS do estado local se falhar
+      setSelectedOS(os)
+    }
     setViewDialogOpen(true)
     fetchHistory(os.id)
   }
