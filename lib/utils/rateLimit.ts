@@ -41,6 +41,12 @@ class RateLimiter {
         count: 1,
         resetAt,
       })
+      
+      // Log apenas em desenvolvimento e para login
+      if (process.env.NODE_ENV === "development" && identifier.includes("login")) {
+        console.log(`[RateLimiter] Nova entrada criada - Identifier: ${identifier}, Count: 1, Remaining: ${limit - 1}`)
+      }
+      
       return {
         allowed: true,
         remaining: limit - 1,
@@ -49,6 +55,10 @@ class RateLimiter {
     }
 
     if (entry.count >= limit) {
+      // Log apenas em desenvolvimento
+      if (process.env.NODE_ENV === "development") {
+        console.warn(`[RateLimiter] Limite excedido - Identifier: ${identifier}, Count: ${entry.count}, Limit: ${limit}`)
+      }
       return {
         allowed: false,
         remaining: 0,
@@ -59,6 +69,11 @@ class RateLimiter {
     // Incrementar contador
     entry.count++
     this.store.set(identifier, entry)
+
+    // Log apenas em desenvolvimento e para login
+    if (process.env.NODE_ENV === "development" && identifier.includes("login")) {
+      console.log(`[RateLimiter] Contador incrementado - Identifier: ${identifier}, Count: ${entry.count}, Remaining: ${limit - entry.count}`)
+    }
 
     return {
       allowed: true,
@@ -97,13 +112,18 @@ import type { NextRequest } from "next/server"
  */
 export function getClientIP(request: NextRequest | { headers: { get: (name: string) => string | null }; ip?: string }): string {
   // Tentar obter IP de headers comuns (proxies, load balancers)
+  // Railway usa x-forwarded-for
   const forwarded = request.headers.get("x-forwarded-for")
   if (forwarded) {
-    return forwarded.split(",")[0].trim()
+    const ip = forwarded.split(",")[0].trim()
+    // Validar que é um IP válido
+    if (ip && ip !== "unknown" && ip.length > 0) {
+      return ip
+    }
   }
 
   const realIP = request.headers.get("x-real-ip")
-  if (realIP) {
+  if (realIP && realIP !== "unknown" && realIP.length > 0) {
     return realIP
   }
 
@@ -112,6 +132,17 @@ export function getClientIP(request: NextRequest | { headers: { get: (name: stri
     return request.ip
   }
   
-  return "unknown"
+  // Em produção, usar um identificador único baseado em headers
+  // para evitar que todos os requests com IP desconhecido compartilhem o mesmo contador
+  const cfConnectingIP = request.headers.get("cf-connecting-ip")
+  if (cfConnectingIP) {
+    return cfConnectingIP
+  }
+  
+  // Último recurso: usar user-agent + timestamp como identificador único
+  // Isso evita que múltiplos usuários compartilhem o mesmo contador
+  const userAgent = request.headers.get("user-agent") || "unknown"
+  const timestamp = Math.floor(Date.now() / (15 * 60 * 1000)) // Janela de 15 minutos
+  return `fallback-${userAgent.slice(0, 20)}-${timestamp}`
 }
 

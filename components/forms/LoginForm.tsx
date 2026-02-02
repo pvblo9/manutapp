@@ -33,8 +33,16 @@ export function LoginForm() {
   })
 
   const onSubmit = async (data: LoginFormData) => {
+    // Proteção contra múltiplos submits
+    if (isLoading) {
+      console.log("[LoginForm] Submit bloqueado - já está processando")
+      return
+    }
+
     setIsLoading(true)
     setError(null)
+
+    console.log("[LoginForm] Iniciando login - timestamp:", new Date().toISOString())
 
     try {
       // Converter username e password para lowercase
@@ -43,6 +51,7 @@ export function LoginForm() {
         password: data.password.toLowerCase().trim(),
       }
 
+      console.log("[LoginForm] Fazendo requisição para /api/auth/login")
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
@@ -51,14 +60,17 @@ export function LoginForm() {
         body: JSON.stringify(loginData),
       })
 
+      console.log("[LoginForm] Resposta recebida - status:", response.status)
       const result = await response.json()
 
       if (!response.ok) {
+        console.error("[LoginForm] Erro no login:", result.error)
         setError(result.error || "Erro ao fazer login")
         setIsLoading(false)
         return
       }
 
+      console.log("[LoginForm] Login bem-sucedido, salvando sessão")
       // Salvar sessão
       localStorage.setItem("session", JSON.stringify(result))
       
@@ -68,7 +80,8 @@ export function LoginForm() {
       } else {
         router.push("/operador")
       }
-    } catch {
+    } catch (error) {
+      console.error("[LoginForm] Erro ao conectar com o servidor:", error)
       setError("Erro ao conectar com o servidor")
       setIsLoading(false)
     }
