@@ -33,6 +33,10 @@ export interface ServiceOrder {
   needsPurchase?: boolean | null
   nfDocument?: string | null
   completedAt?: Date | null
+  queueOrder?: number | null
+  machineStopped?: boolean | null
+  machineStoppedAt?: Date | null
+  operatorStartedAt?: Date | null
   createdAt: Date
   updatedAt: Date
   history?: OSHistory[]
@@ -45,6 +49,15 @@ export interface OSHistory {
   user?: User
   message: string
   photos: string[]
+  createdAt: Date
+}
+
+export interface ServiceOrderAlert {
+  id: string
+  serviceOrderId: string
+  alertDate: Date
+  description: string
+  notificationDelivered: boolean
   createdAt: Date
 }
 

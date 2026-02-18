@@ -4,15 +4,10 @@
 
 const START_HOUR = 8
 const END_HOUR = 18
-const MINUTES_PER_DAY = (END_HOUR - START_HOUR) * 60
 
 function isWeekday(d: Date): boolean {
   const day = d.getDay()
   return day >= 1 && day <= 5
-}
-
-function toMinutesSinceMidnight(d: Date): number {
-  return d.getHours() * 60 + d.getMinutes()
 }
 
 /**
