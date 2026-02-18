@@ -6,6 +6,9 @@ import { CloudinaryImage } from "@/components/ui/CloudinaryImage"
 import Image from "next/image"
 import { useAuth } from "@/lib/hooks/useAuth"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
+import { OperatorQueueKanban } from "@/components/kanban/OperatorQueueKanban"
+import { OSAlertsSection } from "@/components/os/OSAlertsSection"
+import { OSTimeSummary } from "@/components/os/OSTimeSummary"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { FloatingActionButton } from "@/components/ui/FloatingActionButton"
 import {
@@ -60,8 +63,6 @@ function AdminPageContent() {
   const [costNfPreview, setCostNfPreview] = useState<string | null>(null)
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false)
   const [completionNote, setCompletionNote] = useState("")
-  const [nfFile, setNfFile] = useState<File | null>(null)
-  const [nfPreview, setNfPreview] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [technicians, setTechnicians] = useState<User[]>([])
   const [history, setHistory] = useState<OSHistory[]>([])
@@ -70,6 +71,7 @@ function AdminPageContent() {
   const [commentPhotoPreviews, setCommentPhotoPreviews] = useState<string[]>([])
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false)
+  const [queueRefreshTrigger, setQueueRefreshTrigger] = useState(0)
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -338,6 +340,7 @@ function AdminPageContent() {
       setEditDialogOpen(false)
       setSelectedOS(null)
       fetchServiceOrders()
+      setQueueRefreshTrigger((t) => t + 1)
       alert("OS atualizada com sucesso!")
     } catch {
       alert("Erro ao atualizar OS")
@@ -365,6 +368,7 @@ function AdminPageContent() {
       }
 
       fetchServiceOrders()
+      setQueueRefreshTrigger((t) => t + 1)
       alert("OS cancelada com sucesso!")
     } catch {
       alert("Erro ao cancelar OS")
@@ -458,6 +462,7 @@ function AdminPageContent() {
       setCostNfFile(null)
       setCostNfPreview(null)
       fetchServiceOrders()
+      setQueueRefreshTrigger((t) => t + 1)
       alert("Custo adicionado com sucesso!")
     } catch (error) {
       console.error("Erro ao adicionar custo:", error)
@@ -470,8 +475,6 @@ function AdminPageContent() {
   const handleComplete = (os: ServiceOrder) => {
     setSelectedOS(os)
     setCompletionNote("")
-    setNfFile(null)
-    setNfPreview(null)
     setCompleteDialogOpen(true)
   }
 
@@ -480,27 +483,6 @@ function AdminPageContent() {
 
     setIsSubmitting(true)
     try {
-      let nfDocumentUrl = selectedOS.nfDocument || null
-
-      // Fazer upload do documento NF se houver
-      if (nfFile) {
-        const formData = new FormData()
-        formData.append("file", nfFile)
-        formData.append("osId", selectedOS.id)
-
-        const uploadResponse = await fetch("/api/upload-nf", {
-          method: "POST",
-          body: formData,
-        })
-
-        if (!uploadResponse.ok) {
-          throw new Error("Erro ao fazer upload do documento NF")
-        }
-
-        const uploadResult = await uploadResponse.json()
-        nfDocumentUrl = uploadResult.url
-      }
-
       // Finalizar OS
       const response = await fetch(`/api/service-orders/${selectedOS.id}`, {
         method: "PATCH",
@@ -510,7 +492,6 @@ function AdminPageContent() {
         body: JSON.stringify({
           status: "COMPLETED",
           completionNote: completionNote || "Finalizada pelo administrador",
-          nfDocument: nfDocumentUrl,
         }),
       })
 
@@ -521,46 +502,14 @@ function AdminPageContent() {
       setCompleteDialogOpen(false)
       setSelectedOS(null)
       setCompletionNote("")
-      setNfFile(null)
-      setNfPreview(null)
       fetchServiceOrders()
+      setQueueRefreshTrigger((t) => t + 1)
       alert("OS finalizada com sucesso!")
     } catch (error) {
       console.error("Erro ao finalizar OS:", error)
       alert("Erro ao finalizar OS")
     } finally {
       setIsSubmitting(false)
-    }
-  }
-
-  const handleNfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      // Validar tipo
-      const validTypes = ["image/jpeg", "image/jpg", "application/pdf"]
-      if (!validTypes.includes(file.type)) {
-        alert("Por favor, selecione um arquivo JPG ou PDF")
-        return
-      }
-
-      // Validar tamanho (10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        alert("Arquivo muito grande. Máximo 10MB")
-        return
-      }
-
-      setNfFile(file)
-
-      // Criar preview se for imagem
-      if (file.type.startsWith("image/")) {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          setNfPreview(e.target?.result as string)
-        }
-        reader.readAsDataURL(file)
-      } else {
-        setNfPreview(null)
-      }
     }
   }
 
@@ -599,25 +548,46 @@ function AdminPageContent() {
 
   return (
     <AppLayout userRole="ADMIN">
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-4xl font-display font-bold text-gray-900 mb-2">
+      <div className="w-full max-w-full min-h-[calc(100vh-6rem)] flex flex-col gap-4 sm:gap-6">
+        <div className="flex-shrink-0 px-1">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display font-bold text-gray-900 mb-1 sm:mb-2">
             Painel Administrativo
           </h1>
-          <p className="text-gray-600">
+          <p className="text-sm sm:text-base text-gray-600">
             Gerencie todas as ordens de serviço do sistema
           </p>
         </div>
 
-        <KanbanBoard
-          serviceOrders={serviceOrders}
-          onView={handleView}
-          onEdit={handleEdit}
-          onComplete={handleComplete}
-          onCancel={handleCancel}
-          isAdmin={true}
-          technicians={technicians}
-        />
+        {/* Layout horizontal: Kanban e Fila do operador lado a lado em telas grandes; responsivo em mobile */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 xl:gap-6 items-stretch flex-1 min-h-0 w-full">
+          <div className="min-w-0 min-h-0 flex flex-col w-full">
+            <KanbanBoard
+              serviceOrders={serviceOrders}
+              onView={handleView}
+              onEdit={handleEdit}
+              onComplete={handleComplete}
+              onCancel={handleCancel}
+              isAdmin={true}
+              technicians={technicians}
+            />
+          </div>
+          <div className="min-w-0 min-h-0 flex flex-col w-full">
+            <h2 className="text-xl sm:text-2xl font-display font-bold text-gray-900 mb-1 sm:mb-2 flex-shrink-0">
+              Fila do operador
+            </h2>
+            <p className="text-gray-600 mb-3 sm:mb-4 text-xs sm:text-sm flex-shrink-0">
+              Selecione um operador para ver e reordenar a fila de OS dele. Arraste os cards para alterar a sequência.
+            </p>
+            <OperatorQueueKanban
+              technicians={technicians}
+              onView={handleView}
+              onEdit={handleEdit}
+              onComplete={handleComplete}
+              onCancel={handleCancel}
+              queueRefreshTrigger={queueRefreshTrigger}
+            />
+          </div>
+        </div>
       </div>
 
       <FloatingActionButton />
@@ -684,6 +654,8 @@ function AdminPageContent() {
                 <p className="text-xs text-gray-600 mb-2">Descrição</p>
                 <p className="text-sm text-gray-800 whitespace-pre-wrap">{selectedOS.description}</p>
               </div>
+              {/* Alertas: criar alerta (data + descrição) — no dia aparece para admin e operador */}
+              <OSAlertsSection serviceOrderId={selectedOS.id} />
               {/* Histórico/Comentários */}
               <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-gray-200">
                 <p className="text-xs text-gray-600 mb-3 font-semibold">Histórico</p>
@@ -706,7 +678,7 @@ function AdminPageContent() {
                           <div className="grid grid-cols-3 gap-2 mt-2">
                             {entry.photos.map((photo, idx) => (
                               <CloudinaryImage
-                                key={idx}
+                                key={`${entry.id}-photo-${idx}-${photo}`}
                                 src={photo}
                                 alt={`Foto ${idx + 1}`}
                                 width={100}
@@ -746,7 +718,7 @@ function AdminPageContent() {
                       <div className="grid grid-cols-3 gap-2 mt-2">
                         {commentPhotoPreviews.map((preview, idx) => (
                           <img
-                            key={idx}
+                            key={`preview-${idx}-${preview.substring(0, 20)}`}
                             src={preview}
                             alt={`Preview ${idx + 1}`}
                             className="w-full h-20 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
@@ -774,6 +746,7 @@ function AdminPageContent() {
                   <p className="text-sm text-gray-800 whitespace-pre-wrap">{selectedOS.completionNote}</p>
                 </div>
               )}
+              <OSTimeSummary os={selectedOS} />
               {selectedOS.cost && (
                 <div className="bg-primary-50/50 backdrop-blur-sm p-4 rounded-xl border border-primary-200">
                   <p className="text-xs text-primary-700 mb-1 font-semibold">Custo</p>
@@ -802,7 +775,7 @@ function AdminPageContent() {
                   <div className="grid grid-cols-3 gap-3">
                     {selectedOS.photos.map((photo: string, index: number) => (
                       <CloudinaryImage
-                        key={index}
+                        key={`${selectedOS.id}-photo-${index}-${photo.substring(0, 30)}`}
                         src={photo}
                         alt={`Foto ${index + 1}`}
                         width={100}
@@ -987,7 +960,7 @@ function AdminPageContent() {
               Finalizar OS
             </DialogTitle>
             <DialogDescription className="text-sm lg:text-base text-gray-600">
-              Descreva o que foi feito e anexe a Nota Fiscal (NF) se necessário
+              Descreva o que foi feito
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -1004,60 +977,12 @@ function AdminPageContent() {
                 className="input-modern resize-none"
               />
             </div>
-            <div>
-              <Label htmlFor="nfDocument" className="text-gray-700 mb-2 block">
-                Anexar Nota Fiscal (NF) <span className="text-gray-500 text-xs">(JPG ou PDF - opcional)</span>
-              </Label>
-              <div className="space-y-2">
-                <input
-                  type="file"
-                  id="nfDocument"
-                  accept=".jpg,.jpeg,.pdf,image/jpeg,image/jpg,application/pdf"
-                  onChange={handleNfFileChange}
-                  className="input-modern"
-                />
-                {nfPreview && (
-                  <div className="mt-2">
-                    <p className="text-xs text-gray-600 mb-2">Preview:</p>
-                    <Image
-                      src={nfPreview}
-                      alt="Preview NF"
-                      width={200}
-                      height={200}
-                      className="max-w-full h-auto rounded-lg border border-gray-200"
-                    />
-                  </div>
-                )}
-                {nfFile && !nfPreview && (
-                  <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-200">
-                    <p className="text-sm text-blue-700">
-                      📄 {nfFile.name} (PDF)
-                    </p>
-                  </div>
-                )}
-                {selectedOS?.nfDocument && (
-                  <div className="mt-2 p-2 bg-green-50 rounded-lg border border-green-200">
-                    <p className="text-sm text-green-700 mb-1">NF já anexada:</p>
-                    <a
-                      href={selectedOS.nfDocument}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:underline"
-                    >
-                      Ver documento atual
-                    </a>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => {
                 setCompleteDialogOpen(false)
-                setNfFile(null)
-                setNfPreview(null)
               }}
               className="btn-secondary"
             >
