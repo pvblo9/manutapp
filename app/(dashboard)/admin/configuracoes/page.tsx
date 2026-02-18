@@ -216,11 +216,12 @@ export default function ConfiguracoesPage() {
     }
   }
 
+  const MACHINE_CODE_PREFIX = "machineCode::"
+  const SITUATION_PREFIX = "situation::"
+  const centerList = configurations.machine?.values ?? []
+
   const configTypes = [
-    { key: "machine", label: "Máquinas" },
-    { key: "machineCode", label: "Códigos de Máquina" },
     { key: "maintenanceType", label: "Tipos de Manutenção" },
-    { key: "situation", label: "Situações" },
     { key: "contactPerson", label: "Pessoas de Contato" },
     { key: "sector", label: "Setores" },
   ]
@@ -284,6 +285,191 @@ export default function ConfiguracoesPage() {
       {/* Aba de Configurações */}
       {activeTab === "config" && (
         <div className="space-y-4">
+          {/* Centros de Custo: lista + por centro (máquinas e motivos) */}
+          <div className="card-glass border-2 border-primary-200">
+            <div className="mb-4">
+              <h3 className="font-display font-bold text-lg text-gray-900 mb-1">
+                Centros de Custo
+              </h3>
+              <p className="text-gray-600 text-sm">
+                Defina os centros de custo e, para cada um, os códigos de máquina e os motivos (situações).
+              </p>
+            </div>
+
+            {/* Lista de Centros de Custo */}
+            <div className="mb-6">
+              <h4 className="font-semibold text-gray-800 mb-2">Lista de Centros de Custo</h4>
+              {editingConfig === "machine" ? (
+                <div className="space-y-4">
+                  <Label className="text-gray-700 mb-2 block">
+                    Nome de cada centro (um por linha)
+                  </Label>
+                  <Textarea
+                    rows={4}
+                    value={configValues}
+                    onChange={(e) => setConfigValues(e.target.value)}
+                    placeholder="Ex.: Produção&#10;Qualidade&#10;Manutenção"
+                    className="input-modern resize-none"
+                  />
+                  <div className="flex gap-2">
+                    <button onClick={() => handleSaveConfig("machine")} className="btn-primary">
+                      Salvar
+                    </button>
+                    <button
+                      onClick={() => { setEditingConfig(null); setConfigValues("") }}
+                      className="btn-secondary"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {configurations.machine?.values && configurations.machine.values.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {configurations.machine.values.map((value: string, index: number) => (
+                        <span
+                          key={index}
+                          className="px-3 py-1 bg-primary-500/10 text-primary-500 rounded-full text-sm"
+                        >
+                          {value}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 mb-2">Nenhum centro definido. Adicione para configurar máquinas e motivos por centro.</p>
+                  )}
+                  <button
+                    onClick={() => {
+                      setEditingConfig("machine")
+                      setConfigValues(configurations.machine?.values?.join("\n") || "")
+                    }}
+                    className="btn-secondary"
+                  >
+                    Editar lista de centros
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Por centro: Códigos de Máquina e Motivos (Situações) */}
+            {centerList.length > 0 && (
+              <div className="space-y-4 pt-4 border-t border-gray-200">
+                <h4 className="font-semibold text-gray-800">Máquinas e motivos por centro</h4>
+                {centerList.map((centerName: string) => {
+                  const machineCodeType = MACHINE_CODE_PREFIX + centerName
+                  const situationType = SITUATION_PREFIX + centerName
+                  const isEditingCodes = editingConfig === machineCodeType
+                  const isEditingSituations = editingConfig === situationType
+                  const machineCodeConfig = configurations[machineCodeType]
+                  const situationConfig = configurations[situationType]
+
+                  return (
+                    <div key={centerName} className="rounded-xl bg-white/60 p-4 border border-gray-200">
+                      <p className="font-medium text-gray-900 mb-3">{centerName}</p>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <p className="text-sm text-gray-600 mb-1">Códigos de Máquina</p>
+                          {isEditingCodes ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                rows={3}
+                                value={configValues}
+                                onChange={(e) => setConfigValues(e.target.value.toUpperCase())}
+                                placeholder="Um código por linha"
+                                className="input-modern resize-none text-sm"
+                              />
+                              <div className="flex gap-2">
+                                <button onClick={() => handleSaveConfig(machineCodeType)} className="btn-primary text-sm py-1.5 px-3">
+                                  Salvar
+                                </button>
+                                <button
+                                  onClick={() => { setEditingConfig(null); setConfigValues("") }}
+                                  className="btn-secondary text-sm py-1.5 px-3"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              {machineCodeConfig?.values && machineCodeConfig.values.length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5 mb-1">
+                                  {machineCodeConfig.values.map((v: string, i: number) => (
+                                    <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-sm">{v}</span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-500 mb-1">Nenhum código</p>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingConfig(machineCodeType)
+                                  setConfigValues(machineCodeConfig?.values?.join("\n") || "")
+                                }}
+                                className="text-sm text-primary-600 hover:underline"
+                              >
+                                Editar
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600 mb-1">Motivos / Situações</p>
+                          {isEditingSituations ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                rows={3}
+                                value={configValues}
+                                onChange={(e) => setConfigValues(e.target.value)}
+                                placeholder="Um motivo por linha"
+                                className="input-modern resize-none text-sm"
+                              />
+                              <div className="flex gap-2">
+                                <button onClick={() => handleSaveConfig(situationType)} className="btn-primary text-sm py-1.5 px-3">
+                                  Salvar
+                                </button>
+                                <button
+                                  onClick={() => { setEditingConfig(null); setConfigValues("") }}
+                                  className="btn-secondary text-sm py-1.5 px-3"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              {situationConfig?.values && situationConfig.values.length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5 mb-1">
+                                  {situationConfig.values.map((v: string, i: number) => (
+                                    <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-sm">{v}</span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-500 mb-1">Nenhum motivo</p>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingConfig(situationType)
+                                  setConfigValues(situationConfig?.values?.join("\n") || "")
+                                }}
+                                className="text-sm text-primary-600 hover:underline"
+                              >
+                                Editar
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
           {configTypes.map((configType) => {
             const config = configurations[configType.key]
             const isEditing = editingConfig === configType.key
