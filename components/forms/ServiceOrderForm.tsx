@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -12,10 +12,11 @@ import { format } from "date-fns"
 import { CloudinaryImage } from "@/components/ui/CloudinaryImage"
 import { Priority } from "@prisma/client"
 import type { Configuration, User } from "@/types"
+import { formatDateForInput } from "@/lib/utils/dateHelpers"
 
 const serviceOrderSchema = z.object({
-  machine: z.string().min(1, "Máquina é obrigatória"),
-  machineCode: z.string().min(1, "Código da máquina é obrigatório"),
+  machine: z.string().min(1, "Centro de Custo é obrigatório"),
+  machineCode: z.string().min(1, "Código das Máquinas é obrigatório"),
   maintenanceType: z.string().min(1, "Tipo de manutenção é obrigatório"),
   situation: z.string().min(1, "Situação é obrigatória"),
   technicianId: z.string().min(1, "Técnico é obrigatório"),
@@ -23,12 +24,13 @@ const serviceOrderSchema = z.object({
   contactPerson: z.string().min(1, "Pessoa de contato é obrigatória"),
   sector: z.string().min(1, "Setor é obrigatório"),
   priority: z.nativeEnum(Priority).optional(),
+  machineStopped: z.enum(["SIM", "NÃO"]).optional(),
 })
 
 type ServiceOrderFormData = z.infer<typeof serviceOrderSchema>
 
 interface ServiceOrderFormProps {
-  onSubmit: (data: ServiceOrderFormData & { photos: string[]; files?: File[] }) => Promise<void>
+  onSubmit: (data: ServiceOrderFormData & { photos: string[]; files?: File[]; machineStopped?: boolean }) => Promise<void>
   initialData?: Partial<ServiceOrderFormData>
   isEditing?: boolean
 }
@@ -45,11 +47,16 @@ export function ServiceOrderForm({
   const [uploading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  const MACHINE_CODE_PREFIX = "machineCode::"
+  const SITUATION_PREFIX = "situation::"
+
   const {
     register,
     handleSubmit,
     formState: { errors },
     setValue,
+    watch,
+    reset,
   } = useForm<ServiceOrderFormData>({
     resolver: zodResolver(serviceOrderSchema),
     defaultValues: initialData || {
@@ -62,6 +69,7 @@ export function ServiceOrderForm({
       contactPerson: "",
       sector: "",
       priority: Priority.MEDIUM,
+      machineStopped: "NÃO",
     },
   })
 
@@ -93,6 +101,24 @@ export function ServiceOrderForm({
       })
     }
   }, [initialData, setValue])
+
+  const selectedCenter = watch("machine")
+  const prevCenterRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (prevCenterRef.current !== null && prevCenterRef.current !== selectedCenter) {
+      setValue("machineCode", "")
+      setValue("situation", "")
+    }
+    prevCenterRef.current = selectedCenter ?? null
+  }, [selectedCenter, setValue])
+
+  const centerMachineCodes = selectedCenter
+    ? (configurations[MACHINE_CODE_PREFIX + selectedCenter] ?? [])
+    : []
+  const centerSituations = selectedCenter
+    ? (configurations[SITUATION_PREFIX + selectedCenter] ?? [])
+    : []
 
   const handleFileSelect = (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -141,7 +167,25 @@ export function ServiceOrderForm({
   const onFormSubmit = async (data: ServiceOrderFormData) => {
     setIsSubmitting(true)
     try {
-      await onSubmit({ ...data, photos, files: pendingFiles })
+      const machineStopped = (data as any).machineStopped === "SIM"
+      await onSubmit({ ...data, photos, files: pendingFiles, machineStopped })
+      // Limpar formulário após sucesso (apenas se não estiver editando)
+      if (!isEditing) {
+        reset({
+          machine: "",
+          machineCode: "",
+          maintenanceType: "",
+          situation: "",
+          technicianId: "",
+          description: "",
+          contactPerson: "",
+          sector: "",
+          priority: Priority.MEDIUM,
+          machineStopped: "NÃO",
+        })
+        setPhotos([])
+        setPendingFiles([])
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -155,103 +199,10 @@ export function ServiceOrderForm({
           <Input
             id="date"
             type="date"
-            defaultValue={format(new Date(), "yyyy-MM-dd")}
+            defaultValue={formatDateForInput(new Date())}
             disabled
             className="input-modern opacity-50"
           />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="machine" className="text-gray-700">
-            Máquina <span className="text-red-500">*</span>
-          </Label>
-          <Select id="machine" {...register("machine")} className="input-modern">
-            <option value="">Selecione...</option>
-            {configurations.machine?.map((value: string) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </Select>
-          {errors.machine && (
-            <p className="text-sm text-red-500">{errors.machine.message}</p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="machineCode" className="text-gray-700">
-            Código da Máquina <span className="text-red-500">*</span>
-          </Label>
-          <Select id="machineCode" {...register("machineCode")} className="input-modern">
-            <option value="">Selecione...</option>
-            {configurations.machineCode?.map((value: string) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </Select>
-          {errors.machineCode && (
-            <p className="text-sm text-red-500">
-              {errors.machineCode.message}
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="maintenanceType" className="text-gray-700">
-            Tipo de Manutenção <span className="text-red-500">*</span>
-          </Label>
-          <Select id="maintenanceType" {...register("maintenanceType")} className="input-modern">
-            <option value="">Selecione...</option>
-            {configurations.maintenanceType?.map((value: string) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </Select>
-          {errors.maintenanceType && (
-            <p className="text-sm text-red-500">
-              {errors.maintenanceType.message}
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="situation" className="text-gray-700">
-            Situação <span className="text-red-500">*</span>
-          </Label>
-          <Select id="situation" {...register("situation")} className="input-modern">
-            <option value="">Selecione...</option>
-            {configurations.situation?.map((value: string) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </Select>
-          {errors.situation && (
-            <p className="text-sm text-red-500">
-              {errors.situation.message}
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="technicianId" className="text-gray-700">
-            Técnico <span className="text-red-500">*</span>
-          </Label>
-          <Select id="technicianId" {...register("technicianId")} className="input-modern">
-            <option value="">Selecione...</option>
-            {users.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name}
-              </option>
-            ))}
-          </Select>
-          {errors.technicianId && (
-            <p className="text-sm text-red-500">
-              {errors.technicianId.message}
-            </p>
-          )}
         </div>
 
         <div className="space-y-2">
@@ -260,8 +211,8 @@ export function ServiceOrderForm({
           </Label>
           <Select id="contactPerson" {...register("contactPerson")} className="input-modern">
             <option value="">Selecione...</option>
-            {configurations.contactPerson?.map((value: string) => (
-              <option key={value} value={value}>
+            {configurations.contactPerson?.map((value: string, index: number) => (
+              <option key={`contactPerson-${index}-${value}`} value={value}>
                 {value}
               </option>
             ))}
@@ -279,14 +230,129 @@ export function ServiceOrderForm({
           </Label>
           <Select id="sector" {...register("sector")} className="input-modern">
             <option value="">Selecione...</option>
-            {configurations.sector?.map((value: string) => (
-              <option key={value} value={value}>
+            {configurations.sector?.map((value: string, index: number) => (
+              <option key={`sector-${index}-${value}`} value={value}>
                 {value}
               </option>
             ))}
           </Select>
           {errors.sector && (
             <p className="text-sm text-red-500">{errors.sector.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="machine" className="text-gray-700">
+            Centro de Custo <span className="text-red-500">*</span>
+          </Label>
+          <Select id="machine" {...register("machine")} className="input-modern">
+            <option value="">Selecione...</option>
+            {configurations.machine?.map((value: string, index: number) => (
+              <option key={`machine-${index}-${value}`} value={value}>
+                {value}
+              </option>
+            ))}
+          </Select>
+          {errors.machine && (
+            <p className="text-sm text-red-500">{errors.machine.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="machineCode" className="text-gray-700">
+            Código das Máquinas <span className="text-red-500">*</span>
+          </Label>
+          <Select
+            id="machineCode"
+            {...register("machineCode")}
+            className="input-modern"
+            disabled={!selectedCenter}
+          >
+            <option value="">{selectedCenter ? "Selecione..." : "Selecione primeiro o Centro de Custo"}</option>
+            {centerMachineCodes.map((value: string, index: number) => (
+              <option key={`${selectedCenter}-machineCode-${index}-${value}`} value={value}>
+                {value}
+              </option>
+            ))}
+          </Select>
+          {errors.machineCode && (
+            <p className="text-sm text-red-500">
+              {errors.machineCode.message}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="maintenanceType" className="text-gray-700">
+            Tipo de Manutenção <span className="text-red-500">*</span>
+          </Label>
+          <Select id="maintenanceType" {...register("maintenanceType")} className="input-modern">
+            <option value="">Selecione...</option>
+            {configurations.maintenanceType?.map((value: string, index: number) => (
+              <option key={`maintenanceType-${index}-${value}`} value={value}>
+                {value}
+              </option>
+            ))}
+          </Select>
+          {errors.maintenanceType && (
+            <p className="text-sm text-red-500">
+              {errors.maintenanceType.message}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="situation" className="text-gray-700">
+            Situação <span className="text-red-500">*</span>
+          </Label>
+          <Select
+            id="situation"
+            {...register("situation")}
+            className="input-modern"
+            disabled={!selectedCenter}
+          >
+            <option value="">{selectedCenter ? "Selecione..." : "Selecione primeiro o Centro de Custo"}</option>
+            {centerSituations.map((value: string, index: number) => (
+              <option key={`${selectedCenter}-situation-${index}-${value}`} value={value}>
+                {value}
+              </option>
+            ))}
+          </Select>
+          {errors.situation && (
+            <p className="text-sm text-red-500">
+              {errors.situation.message}
+            </p>
+          )}
+        </div>
+
+        {!isEditing && (
+          <div className="space-y-2">
+            <Label htmlFor="machineStopped" className="text-gray-700">
+              Máquina Parada
+            </Label>
+            <Select id="machineStopped" {...register("machineStopped")} className="input-modern">
+              <option value="NÃO">NÃO</option>
+              <option value="SIM">SIM</option>
+            </Select>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="technicianId" className="text-gray-700">
+            Técnico <span className="text-red-500">*</span>
+          </Label>
+          <Select id="technicianId" {...register("technicianId")} className="input-modern">
+            <option value="">Selecione...</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name}
+              </option>
+            ))}
+          </Select>
+          {errors.technicianId && (
+            <p className="text-sm text-red-500">
+              {errors.technicianId.message}
+            </p>
           )}
         </div>
 
@@ -359,7 +425,7 @@ export function ServiceOrderForm({
             {photos.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {photos.map((photo, index) => (
-                  <div key={index} className="relative">
+                  <div key={`photo-${index}-${photo.substring(0, 30)}`} className="relative">
                       <CloudinaryImage
                         src={photo}
                         alt={`Foto ${index + 1}`}

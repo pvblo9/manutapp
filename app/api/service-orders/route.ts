@@ -42,6 +42,15 @@ export async function GET(request: NextRequest) {
     // Contar total de registros (para metadata de paginação)
     const total = await prisma.serviceOrder.count({ where })
 
+    // Ordenação: operador vê a mesma sequência da fila definida pelo admin (queueOrder)
+    const orderBy: Prisma.ServiceOrderOrderByWithRelationInput[] =
+      userRole === "OPERATOR" && userId
+        ? [
+            { queueOrder: { sort: "asc", nulls: "last" } },
+            { createdAt: "desc" },
+          ]
+        : [{ createdAt: "desc" }]
+
     // Buscar registros paginados
     // Otimização: não retornar photos na listagem (apenas no detalhamento)
     const serviceOrders = await prisma.serviceOrder.findMany({
@@ -59,6 +68,7 @@ export async function GET(request: NextRequest) {
         sector: true,
         status: true,
         priority: true,
+        queueOrder: true,
         // photos removido da listagem para reduzir payload
         completionNote: true,
         cost: true,
@@ -66,6 +76,9 @@ export async function GET(request: NextRequest) {
         needsPurchase: true,
         nfDocument: true,
         completedAt: true,
+        machineStopped: true,
+        machineStoppedAt: true,
+        operatorStartedAt: true,
         createdAt: true,
         updatedAt: true,
         technician: {
@@ -77,9 +90,7 @@ export async function GET(request: NextRequest) {
           },
         },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy,
       skip,
       take: limit,
     })
@@ -142,6 +153,7 @@ export async function POST(request: NextRequest) {
       sector,
       photos,
       priority,
+      machineStopped,
     } = body
 
     if (
@@ -160,9 +172,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const now = new Date()
     const serviceOrder = await prisma.serviceOrder.create({
       data: {
-        date: date ? new Date(date) : new Date(),
+        date: date ? new Date(date) : now,
         machine,
         machineCode,
         maintenanceType,
@@ -174,6 +187,8 @@ export async function POST(request: NextRequest) {
         photos: photos || [],
         status: OSStatus.OPEN,
         priority: (priority as Priority) || Priority.MEDIUM,
+        machineStopped: machineStopped === true || machineStopped === "true",
+        machineStoppedAt: machineStopped === true || machineStopped === "true" ? now : null,
       },
       include: {
         technician: {
@@ -195,7 +210,7 @@ export async function POST(request: NextRequest) {
           userId: technicianId,
           type: NotificationType.NEW_OS,
           title: "Nova Ordem de Serviço",
-          message: `Nova OS criada: ${machine} - ${machineCode}`,
+          message: `Nova O.S criada: ${contactPerson} - ${sector} - ${machine} - ${situation} - ${serviceOrder.technician.name} - ${priority === Priority.HIGH ? "ALTA" : priority === Priority.MEDIUM ? "MÉDIA" : "BAIXA"}`,
           link: `/operador?osId=${serviceOrder.id}`,
         },
       })
@@ -213,7 +228,7 @@ export async function POST(request: NextRequest) {
               userId: admin.id,
               type: NotificationType.NEW_OS,
               title: "Nova Ordem de Serviço",
-              message: `Nova OS criada: ${machine} - ${machineCode} (Técnico: ${serviceOrder.technician.name})`,
+              message: `Nova O.S criada: ${contactPerson} - ${sector} - ${machine} - ${situation} - ${serviceOrder.technician.name} - ${priority === Priority.HIGH ? "ALTA" : priority === Priority.MEDIUM ? "MÉDIA" : "BAIXA"}`,
               link: `/admin?osId=${serviceOrder.id}`,
             },
           })

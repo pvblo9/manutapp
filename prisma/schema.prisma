@@ -18,6 +18,7 @@ model User {
   assignedOS ServiceOrder[] @relation("AssignedTechnician")
   osHistory  OSHistory[]
   notifications Notification[]
+  preventiveSchedules PreventiveSchedule[]
 }
 
 model ServiceOrder {
@@ -33,17 +34,22 @@ model ServiceOrder {
   sector          String
   status          OSStatus    @default(OPEN)
   priority        Priority    @default(MEDIUM)
+  queueOrder      Int?        // Ordem na fila do operador (apenas OS OPEN)
   photos          String[]
   completionNote  String?
   cost            Float?
-  completedAt     DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  hadCost         Boolean?
-  needsPurchase   Boolean?
-  nfDocument      String?
-  technician      User        @relation("AssignedTechnician", fields: [technicianId], references: [id])
+  completedAt       DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  hadCost           Boolean?
+  needsPurchase     Boolean?
+  nfDocument        String?
+  machineStopped    Boolean?    // Máquina parada (SIM/NÃO) na criação
+  machineStoppedAt  DateTime?   // Início máquina parada (quando SIM); fim = completedAt
+  operatorStartedAt DateTime?   // Quando operador clicou "Iniciar OS"; fim = completedAt
+  technician        User        @relation("AssignedTechnician", fields: [technicianId], references: [id])
   history         OSHistory[]
+  alerts          ServiceOrderAlert[]
 
   @@index([technicianId])
   @@index([status])
@@ -83,6 +89,20 @@ model OSHistory {
   @@index([serviceOrderId])
   @@index([userId])
   @@index([createdAt])
+}
+
+model ServiceOrderAlert {
+  id                   String       @id @default(uuid())
+  serviceOrderId       String
+  alertDate            DateTime     // Data em que o alerta deve aparecer
+  description          String
+  notificationDelivered Boolean     @default(false) // Notificação já criada para o dia
+  createdAt            DateTime     @default(now())
+  serviceOrder         ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+
+  @@index([serviceOrderId])
+  @@index([alertDate])
+  @@index([alertDate, notificationDelivered])
 }
 
 enum Role {
@@ -125,4 +145,80 @@ enum NotificationType {
   OS_NEEDS_PURCHASE   // OS marcada como necessária compra
   OS_COMPLETED        // OS finalizada
   OS_UPDATED          // OS atualizada
+  OS_ALERT            // Alerta programado da OS (data + descrição)
+  PREVENTIVE_ASSIGNED       // Preventiva atribuída a operador
+  PREVENTIVE_DUE_SOON       // Preventiva próxima (7 dias)
+  PREVENTIVE_DUE_TODAY      // Preventiva hoje
+  PREVENTIVE_OVERDUE        // Preventiva atrasada
+  PREVENTIVE_COMPLETED      // Preventiva finalizada por operador
+}
+
+// --- Módulo Manutenção Preventiva (separado de ServiceOrder) ---
+
+model PreventiveEquipment {
+  id        String   @id @default(uuid())
+  name      String   // Ex: "Taurus (2289)"
+  machine   String   // Centro de custo
+  machineCode String // Código da máquina
+  category  String   // Ex: "máquinas de corte", "predial"
+  frequency PreventiveFrequency
+  active    Boolean  @default(true)
+  schedules PreventiveSchedule[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([machine, active])
+  @@index([category, active])
+}
+
+model PreventiveSchedule {
+  id                String                    @id @default(uuid())
+  equipmentId       String
+  year              Int
+  month             Int
+  period            Int   // 1, 2 ou 3 (decêndio)
+  status            PreventiveStatus
+  assignedType      PreventiveAssignedType?
+  technicianId      String?
+  outsourcedCompany String?
+  outsourcedContact String?
+  scheduledDate     DateTime?
+  startedAt         DateTime?
+  completedDate     DateTime?
+  duration          Int?
+  workDescription   String?
+  observations      String?
+  photos            String[]
+  cost              Float?
+  nfDocument       String?
+  equipment         PreventiveEquipment       @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  technician        User?                     @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  @@unique([equipmentId, year, month, period])
+  @@index([technicianId, status, assignedType])
+  @@index([year, month, status])
+  @@index([scheduledDate])
+}
+
+enum PreventiveFrequency {
+  QUARTERLY   // 3 meses - 4x ao ano
+  BIMONTHLY   // 2 meses - 6x ao ano
+  SEMIANNUAL  // 6 meses - 2x ao ano
+  ANNUAL      // 12 meses - 1x ao ano
+}
+
+enum PreventiveStatus {
+  PLANNED     // Planejada (ainda não atribuída)
+  SCHEDULED   // Agendada (com operador/terceirizado definido)
+  IN_PROGRESS // Em execução (operador interno iniciou)
+  COMPLETED   // Concluída
+  NOT_DONE    // Não realizada
+  CANCELLED   // Cancelada
+}
+
+enum PreventiveAssignedType {
+  INTERNAL   // Operador interno
+  OUTSOURCED // Terceirizado
 }

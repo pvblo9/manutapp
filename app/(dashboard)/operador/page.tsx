@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { CloudinaryImage } from "@/components/ui/CloudinaryImage"
 import { useAuth } from "@/lib/hooks/useAuth"
 import { KanbanBoard } from "@/components/kanban/KanbanBoard"
+import { OSAlertsSection } from "@/components/os/OSAlertsSection"
+import { OSTimeSummary } from "@/components/os/OSTimeSummary"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { FloatingActionButton } from "@/components/ui/FloatingActionButton"
 import {
@@ -280,6 +282,23 @@ function OperadorPageContent() {
     }
   }
 
+  const handleStartOS = useCallback(async () => {
+    if (!selectedOS || selectedOS.operatorStartedAt) return
+    try {
+      const response = await fetch(`/api/service-orders/${selectedOS.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operatorStartedAt: new Date().toISOString() }),
+      })
+      if (!response.ok) throw new Error("Erro ao iniciar OS")
+      const updated = await response.json()
+      setSelectedOS(updated)
+      setServiceOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
+    } catch {
+      alert("Erro ao iniciar OS")
+    }
+  }, [selectedOS])
+
   const handleComplete = (os: ServiceOrder) => {
     setSelectedOS(os)
     setCompletionNote("")
@@ -301,6 +320,7 @@ function OperadorPageContent() {
           status: "COMPLETED",
           completionNote,
           hadCost,
+          completedByUserId: user?.id,
         }),
       })
 
@@ -422,6 +442,7 @@ function OperadorPageContent() {
                 <p className="text-xs text-gray-600 mb-2">Descrição</p>
                 <p className="text-sm text-gray-800 whitespace-pre-wrap">{selectedOS.description}</p>
               </div>
+              <OSAlertsSection serviceOrderId={selectedOS.id} />
               {/* Necessária compra de peça */}
               {selectedOS.status === "OPEN" && (
                 <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-gray-200">
@@ -461,7 +482,7 @@ function OperadorPageContent() {
                           <div className="grid grid-cols-2 gap-2 mt-2">
                             {entry.photos.map((photo, idx) => (
                               <CloudinaryImage
-                                key={idx}
+                                key={`${entry.id}-photo-${idx}-${photo}`}
                                 src={photo}
                                 alt={`Foto ${idx + 1}`}
                                 width={100}
@@ -501,7 +522,7 @@ function OperadorPageContent() {
                       <div className="grid grid-cols-3 gap-2 mt-2">
                         {commentPhotoPreviews.map((preview, idx) => (
                           <img
-                            key={idx}
+                            key={`preview-${idx}-${preview.substring(0, 20)}`}
                             src={preview}
                             alt={`Preview ${idx + 1}`}
                             className="w-full h-20 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
@@ -529,13 +550,14 @@ function OperadorPageContent() {
                   <p className="text-sm text-gray-800 whitespace-pre-wrap">{selectedOS.completionNote}</p>
                 </div>
               )}
+              <OSTimeSummary os={selectedOS} />
               {selectedOS.photos && selectedOS.photos.length > 0 && (
                 <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-gray-200">
                   <p className="text-xs text-gray-600 mb-3 font-semibold">Fotos</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 lg:gap-3">
                     {selectedOS.photos.map((photo: string, index: number) => (
                       <CloudinaryImage
-                        key={index}
+                        key={`${selectedOS.id}-photo-${index}-${photo.substring(0, 30)}`}
                         src={photo}
                         alt={`Foto ${index + 1}`}
                         width={100}
@@ -553,7 +575,15 @@ function OperadorPageContent() {
               )}
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-wrap gap-2">
+            {selectedOS?.status === "OPEN" && !selectedOS?.operatorStartedAt && (
+              <Button onClick={handleStartOS} className="btn-primary">
+                Iniciar OS
+              </Button>
+            )}
+            {selectedOS?.status === "OPEN" && selectedOS?.operatorStartedAt && (
+              <span className="text-sm text-primary-600 font-medium">OS em andamento</span>
+            )}
             <Button
               variant="outline"
               onClick={() => {

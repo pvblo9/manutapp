@@ -98,7 +98,11 @@ export async function PATCH(
     if (body.sector !== undefined) updateData.sector = body.sector
     if (body.technicianId !== undefined)
       updateData.technician = { connect: { id: body.technicianId } }
+    if (body.queueOrder !== undefined) updateData.queueOrder = body.queueOrder
     if (body.photos !== undefined) updateData.photos = body.photos
+    if (body.operatorStartedAt !== undefined) {
+      updateData.operatorStartedAt = body.operatorStartedAt ? new Date(body.operatorStartedAt) : null
+    }
 
     const serviceOrder = await prisma.serviceOrder.update({
       where: { id },
@@ -138,6 +142,38 @@ export async function PATCH(
         )
       } catch (error) {
         console.error("Erro ao criar notificação de compra necessária:", error)
+      }
+    }
+
+    // Se um OPERADOR finalizou a OS, notificar todos os admins
+    const completedByUserId = body.completedByUserId as string | undefined
+    if (body.status === OSStatus.COMPLETED && completedByUserId) {
+      try {
+        const completedByUser = await prisma.user.findUnique({
+          where: { id: completedByUserId },
+          select: { id: true, name: true, role: true },
+        })
+        if (completedByUser?.role === "OPERATOR") {
+          const admins = await prisma.user.findMany({
+            where: { role: "ADMIN" },
+            select: { id: true },
+          })
+          await Promise.all(
+            admins.map((admin) =>
+              prisma.notification.create({
+                data: {
+                  userId: admin.id,
+                  type: NotificationType.OS_COMPLETED,
+                  title: "OS finalizada pelo operador",
+                  message: `${completedByUser.name} finalizou a OS ${serviceOrder.machine} - ${serviceOrder.machineCode}`,
+                  link: `/admin?osId=${id}`,
+                },
+              })
+            )
+          )
+        }
+      } catch (error) {
+        console.error("Erro ao notificar admins da OS finalizada:", error)
       }
     }
 

@@ -1,11 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { Home, ClipboardList, Settings, BarChart3, LogOut, Menu, X } from "lucide-react"
+import { Home, ClipboardList, Settings, BarChart3, LogOut, Menu, X, Bell, Calendar } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/hooks/useAuth"
-import { NotificationBell } from "@/components/notifications/NotificationBell"
 import { NotificationMenuItem } from "@/components/notifications/NotificationMenuItem"
 
 export function AppLayout({
@@ -56,18 +55,34 @@ export function AppLayout({
             <>
               <Link
                 href="/operador"
-                className={`sidebar-item ${isActive("/operador") ? "active" : ""}`}
+                className={`sidebar-item ${isActive("/operador") && !pathname.includes("notificacoes") ? "active" : ""}`}
                 onClick={() => setSidebarOpen(false)}
               >
                 <Home size={20} />
                 <span>Dashboard</span>
+              </Link>
+              <Link
+                href="/operador/notificacoes"
+                className={`sidebar-item ${pathname === "/operador/notificacoes" ? "active" : ""}`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <Bell size={20} />
+                <span>Notificações</span>
+              </Link>
+              <Link
+                href="/operador/preventivas"
+                className={`sidebar-item ${pathname === "/operador/preventivas" ? "active" : ""}`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <Calendar size={20} />
+                <span>Minhas Preventivas</span>
               </Link>
             </>
           ) : (
             <>
               <Link
                 href="/admin"
-                className={`sidebar-item ${isActive("/admin") && !pathname.includes("dashboard") && !pathname.includes("configuracoes") && !pathname.includes("notificacoes") ? "active" : ""}`}
+                className={`sidebar-item ${isActive("/admin") && !pathname.includes("dashboard") && !pathname.includes("configuracoes") && !pathname.includes("notificacoes") && !pathname.includes("preventivas") ? "active" : ""}`}
                 onClick={() => setSidebarOpen(false)}
               >
                 <ClipboardList size={20} />
@@ -80,6 +95,14 @@ export function AppLayout({
               >
                 <BarChart3 size={20} />
                 <span>Relatórios</span>
+              </Link>
+              <Link
+                href="/admin/preventivas"
+                className={`sidebar-item ${pathname.startsWith("/admin/preventivas") ? "active" : ""}`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <Calendar size={20} />
+                <span>Manutenção Preventiva</span>
               </Link>
               <Link
                 href="/admin/configuracoes"
@@ -100,12 +123,8 @@ export function AppLayout({
         </button>
       </aside>
 
-      {/* Header com notificações */}
-      <header className="fixed top-0 right-0 left-0 lg:left-64 h-16 bg-white/95 backdrop-blur-sm border-b border-gray-200 z-30 flex items-center justify-end px-4 lg:px-8 shadow-sm">
-        <div className="flex items-center gap-4">
-          <NotificationBell />
-        </div>
-      </header>
+      {/* Header */}
+      <header className="fixed top-0 right-0 left-0 lg:left-64 h-16 bg-white/95 backdrop-blur-sm border-b border-gray-200 z-30 flex items-center justify-end px-4 lg:px-8 shadow-sm" />
 
       <main className="lg:ml-64 p-4 lg:p-8 pt-20 lg:pt-20">{children}</main>
     </div>

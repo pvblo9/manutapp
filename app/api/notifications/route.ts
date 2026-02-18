@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db/prisma"
 import { NotificationType } from "@prisma/client"
+import { deliverDueAlerts } from "@/lib/alerts/deliverDueAlerts"
+import { deliverPreventiveAlerts } from "@/lib/alerts/preventiveAlerts"
 
 /**
- * GET - Listar notificações do usuário
+ * GET - Listar notificações do usuário.
+ * Antes de retornar, processa alertas da OS cuja data é hoje e cria notificações para admin e operador.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -16,6 +19,17 @@ export async function GET(request: NextRequest) {
         { error: "userId é obrigatório" },
         { status: 400 }
       )
+    }
+
+    try {
+      await deliverDueAlerts()
+    } catch (e) {
+      console.error("Error delivering due alerts:", e)
+    }
+    try {
+      await deliverPreventiveAlerts()
+    } catch (e) {
+      console.error("Error delivering preventive alerts:", e)
     }
 
     const where: { userId: string; read?: boolean } = { userId }
