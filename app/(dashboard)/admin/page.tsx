@@ -821,7 +821,10 @@ function AdminPageContent() {
           {selectedOS && (
             <ServiceOrderForm
               onSubmit={handleEditSubmit}
-              initialData={selectedOS}
+              initialData={{
+                ...selectedOS,
+                machineStopped: selectedOS.machineStopped === true ? "SIM" : "NÃO",
+              }}
               isEditing={true}
             />
           )}

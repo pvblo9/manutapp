@@ -29,8 +29,14 @@ const serviceOrderSchema = z.object({
 
 type ServiceOrderFormData = z.infer<typeof serviceOrderSchema>
 
+type SubmitPayload = Omit<ServiceOrderFormData, "machineStopped"> & {
+  photos: string[]
+  files?: File[]
+  machineStopped?: boolean
+}
+
 interface ServiceOrderFormProps {
-  onSubmit: (data: ServiceOrderFormData & { photos: string[]; files?: File[]; machineStopped?: boolean }) => Promise<void>
+  onSubmit: (data: SubmitPayload) => Promise<void>
   initialData?: Partial<ServiceOrderFormData>
   isEditing?: boolean
 }
@@ -167,8 +173,9 @@ export function ServiceOrderForm({
   const onFormSubmit = async (data: ServiceOrderFormData) => {
     setIsSubmitting(true)
     try {
-      const machineStopped = (data as any).machineStopped === "SIM"
-      await onSubmit({ ...data, photos, files: pendingFiles, machineStopped })
+      const machineStoppedBool = data.machineStopped === "SIM"
+      const { machineStopped: _, ...rest } = data
+      await onSubmit({ ...rest, photos, files: pendingFiles, machineStopped: machineStoppedBool })
       // Limpar formulário após sucesso (apenas se não estiver editando)
       if (!isEditing) {
         reset({
